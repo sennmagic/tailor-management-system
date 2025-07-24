@@ -3,26 +3,12 @@
 import { ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import {
-  Home,
-  Users,
-  BookOpen,
-  ClipboardList,
-  Settings,
-  LayoutDashboard,
-  Tags,
-  FileText,
-  ChevronDown,
-  Bell,
-  Search,
-} from 'lucide-react'
+import { Search, Bell } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Avatar } from '@/components/ui/avatar'
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
-
-  const isActive = (path: string) => pathname === path
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -33,93 +19,22 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <p className="text-sm text-gray-500">Tailor Management System</p>
         </div>
 
-        <nav className="flex flex-col gap-6 text-sm">
-          {/* Home */}
-          <div>
-            <p className="text-xs font-semibold text-gray-500 mb-2">Home</p>
-            <Link
-              href="/dashboard"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md ${
-                isActive('/dashboard') ? 'bg-green-100 text-green-700' : 'text-gray-700 hover:text-green-600'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              Dashboard
-            </Link>
-            <Link
-              href="/dashboard/customers"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md ${
-                isActive('/dashboard/customers') ? 'bg-green-100 text-green-700' : 'text-gray-700 hover:text-green-600'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              Staff Management
-            </Link>
-          </div>
-
-          {/* Business Management */}
-          <div>
-            <p className="text-xs font-semibold text-gray-500 mb-2">Business Management</p>
-            <Link
-              href="/dashboard/contact-diary"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md ${
-                isActive('/dashboard/contact-diary') ? 'bg-green-100 text-green-700' : 'text-gray-700 hover:text-green-600'
-              }`}
-            >
-              <BookOpen className="w-4 h-4" />
-              Contact Diary
-            </Link>
-            <Link
-              href="/dashboard/notice-board"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md ${
-                isActive('/dashboard/notice-board') ? 'bg-green-100 text-green-700' : 'text-gray-700 hover:text-green-600'
-              }`}
-            >
-              <ClipboardList className="w-4 h-4" />
-              Notice Board
-            </Link>
-          </div>
-
-          {/* System Settings */}
-          <div>
-            <p className="text-xs font-semibold text-gray-500 mb-2">System Settings</p>
-            <Link
-              href="/dashboard/cms"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md ${
-                isActive('/dashboard/cms') ? 'bg-green-100 text-green-700' : 'text-gray-700 hover:text-green-600'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              CMS
-            </Link>
-            <Link
-              href="/dashboard/pricing"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md ${
-                isActive('/dashboard/pricing') ? 'bg-green-100 text-green-700' : 'text-gray-700 hover:text-green-600'
-              }`}
-            >
-              <Tags className="w-4 h-4" />
-              Pricing
-            </Link>
-            <Link
-              href="/dashboard/coupons"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md ${
-                isActive('/dashboard/coupons') ? 'bg-green-100 text-green-700' : 'text-gray-700 hover:text-green-600'
-              }`}
-            >
-              <Tags className="w-4 h-4" />
-              Coupons
-            </Link>
-            <Link
-              href="/dashboard/settings"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md ${
-                isActive('/dashboard/settings') ? 'bg-green-100 text-green-700' : 'text-gray-700 hover:text-green-600'
-              }`}
-            >
-              <Settings className="w-4 h-4" />
-              Settings
-            </Link>
-          </div>
+        <nav className="flex flex-col gap-4 text-sm">
+          <LinkSection title="Introduction">
+            <SidebarLink href="/employees">Employees</SidebarLink>
+            <SidebarLink href="/customers">Customers</SidebarLink>
+            <SidebarLink href="/appointments">Appointments</SidebarLink>
+            <SidebarLink href="/vendors">Vendors</SidebarLink>
+            <SidebarLink href="/logistics">Logistics</SidebarLink>
+            <SidebarLink href="/factories">Factories</SidebarLink>
+            <SidebarLink href="/catalogs">Catalogs</SidebarLink>
+            <SidebarLink href="/measurements">Measurements</SidebarLink>
+            <SidebarLink href="/vendorExpenses">vendorExpenses</SidebarLink>
+            <SidebarLink href="/orders">Orders</SidebarLink>
+            <SidebarLink href="/factoryExpense">factoryExpense</SidebarLink>
+            <SidebarLink href="/invoices">Invoices</SidebarLink>
+            <SidebarLink href="/privilegePoints">privilegePoints</SidebarLink>
+          </LinkSection>
         </nav>
       </aside>
 
@@ -144,4 +59,28 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </div>
     </div>
   )
+
+  function SidebarLink({ href, children }: { href: string; children: ReactNode }) {
+    const isActive = pathname === href
+    return (
+      <Link
+        href={href}
+        className={`flex items-center gap-2 px-3 py-2 rounded-md ${
+          isActive ? 'bg-green-100 text-green-700' : 'text-gray-700 hover:text-green-600'
+        }`}
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+        {children}
+      </Link>
+    )
+  }
+
+  function LinkSection({ title, children }: { title: string; children: ReactNode }) {
+    return (
+      <div>
+        <p className="text-xs font-semibold text-gray-500 mb-1">{title}</p>
+        <div className="flex flex-col space-y-1">{children}</div>
+      </div>
+    )
+  }
 }
