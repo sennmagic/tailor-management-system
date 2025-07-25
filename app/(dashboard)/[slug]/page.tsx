@@ -16,7 +16,7 @@ function Modal({ open, onClose, children }: { open: boolean; onClose: () => void
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded shadow-lg max-w-lg w-full p-6 relative">
+      <div className=" rounded  max-w-lg w-full p-6 relative">
         <button onClick={onClose} className="absolute top-2 right-2 text-gray-500 hover:text-black text-xl">&times;</button>
         {children}
       </div>
@@ -87,102 +87,107 @@ function DynamicForm({ data, onSubmit, onCancel }: { data: Record<string, unknow
   }
 
   return (
-    <form className="space-y-2" onSubmit={handleSubmit}>
-      {Object.entries(formState)
-        .filter(([key]) => !SKIP_FIELDS.includes(key))
-        .map(([key, value]) => {
-          const isCheckbox = key.toLowerCase() === "is" || key.toLowerCase().startsWith("is");
-          let input;
-          if (Array.isArray(value) && value.length > 0 && typeof value[0] === "object") {
-            const subKeys = Object.keys(value[0] as Record<string, unknown>).filter((k) => k !== "_id");
-            input = (
-              <div>
-                <table className="mb-2 w-full border text-xs">
-                  <thead>
-                    <tr>
-                      {subKeys.map((subKey) => (
-                        <th key={subKey} className="border px-2 py-1">{subKey}</th>
-                      ))}
-                      <th className="border px-2 py-1">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(value as Array<Record<string, unknown>>).map((item, idx) => (
-                      <tr key={idx}>
-                        {subKeys.map((subKey) => (
-                          <td key={subKey} className="border px-2 py-1">
-                            <Input
-                              value={
-                                item[subKey] === null || item[subKey] === undefined
-                                  ? ""
-                                  : typeof item[subKey] === "object"
-                                    ? (Array.isArray(item[subKey]) && item[subKey].length === 0) || (Object.keys(item[subKey]).length === 0)
+    <form onSubmit={handleSubmit} className="w-full max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-8 flex flex-col h-[600px]">
+      <h2 className="text-2xl font-bold mb-1">Edit Item <span className="text-gray-400 font-normal text-base">Update the details below</span></h2>
+      <div className="flex-1 overflow-y-auto mt-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
+          {Object.entries(formState)
+            .filter(([key]) => !SKIP_FIELDS.includes(key))
+            .map(([key, value]) => {
+              const isCheckbox = key.toLowerCase() === "is" || key.toLowerCase().startsWith("is");
+              let input;
+              if (Array.isArray(value) && value.length > 0 && typeof value[0] === "object") {
+                const subKeys = Object.keys(value[0] as Record<string, unknown>).filter((k) => k !== "_id");
+                input = (
+                  <div>
+                    <table className="mb-2 w-full border text-xs">
+                      <thead>
+                        <tr>
+                          {subKeys.map((subKey) => (
+                            <th key={subKey} className="border px-2 py-1">{subKey}</th>
+                          ))}
+                          <th className="border px-2 py-1">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(value as Array<Record<string, unknown>>).map((item, idx) => (
+                          <tr key={idx}>
+                            {subKeys.map((subKey) => (
+                              <td key={subKey} className="border px-2 py-1">
+                                <Input
+                                  value={
+                                    item[subKey] === null || item[subKey] === undefined
                                       ? ""
-                                      : JSON.stringify(item[subKey])
-                                    : String(item[subKey])
-                              }
-                              onChange={e => {
-                                const newArr = [...(value as Array<Record<string, unknown>>)];
-                                newArr[idx][subKey] = e.target.value;
+                                      : typeof item[subKey] === "object"
+                                        ? (Array.isArray(item[subKey]) && item[subKey].length === 0) || (Object.keys(item[subKey]).length === 0)
+                                          ? ""
+                                          : JSON.stringify(item[subKey])
+                                        : String(item[subKey])
+                                  }
+                                  onChange={e => {
+                                    const newArr = [...(value as Array<Record<string, unknown>>)]
+                                    newArr[idx][subKey] = e.target.value;
+                                    setFormState(prev => ({ ...prev, [key]: newArr }));
+                                  }}
+                                  className="text-xs"
+                                />
+                              </td>
+                            ))}
+                            <td className="border px-2 py-1">
+                              <Button type="button" variant="outline" size="icon" onClick={() => {
+                                const newArr = (value as Array<Record<string, unknown>>).filter((_, i) => i !== idx);
                                 setFormState(prev => ({ ...prev, [key]: newArr }));
-                              }}
-                              className="text-xs"
-                            />
-                          </td>
+                              }}>
+                                <span className="text-red-500">&times;</span>
+                              </Button>
+                            </td>
+                          </tr>
                         ))}
-                        <td className="border px-2 py-1">
-                          <Button type="button" variant="outline" size="icon" onClick={() => {
-                            const newArr = (value as Array<Record<string, unknown>>).filter((_, i) => i !== idx);
-                            setFormState(prev => ({ ...prev, [key]: newArr }));
-                          }}>
-                            <span className="text-red-500">&times;</span>
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <Button type="button" size="sm" onClick={() => {
-                  const newArr = [...(value as Array<Record<string, unknown>>), Object.fromEntries(subKeys.map(k => [k, ""]))];
-                  setFormState(prev => ({ ...prev, [key]: newArr }));
-                }}>Add</Button>
-              </div>
-            );
-          } else if (isCheckbox) {
-            input = (
-              <Checkbox
-                checked={!!value}
-                onCheckedChange={(checked) => handleCheckboxChange(key, !!checked)}
-                id={key}
-              />
-            );
-          } else if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-            input = renderNestedObject(key, value as Record<string, unknown>);
-          } else if (typeof value === "string") {
-            input = <Input name={key} value={value} onChange={handleChange} type="text" />;
-          } else if (typeof value === "number") {
-            input = <Input name={key} value={value} onChange={handleChange} type="number" />;
-          } else if (typeof value === "boolean") {
-            input = (
-              <Checkbox
-                checked={value as boolean}
-                onCheckedChange={(checked) => handleCheckboxChange(key, !!checked)}
-                id={key}
-              />
-            );
-          } else {
-            input = <Input name={key} value={JSON.stringify(value)} onChange={handleChange} type="text" />;
-          }
-          return (
-            <div key={key} className="flex flex-col">
-              <label className="font-medium mb-1" htmlFor={key}>{key}</label>
-              {input}
-            </div>
-          );
-        })}
-      <div className="flex gap-2 mt-4">
-        <Button type="submit" className="bg-blue-600 text-white">Save</Button>
+                      </tbody>
+                    </table>
+                    <Button type="button" size="sm" onClick={() => {
+                      const newArr = [...(value as Array<Record<string, unknown>>), Object.fromEntries(subKeys.map(k => [k, ""]))];
+                      setFormState(prev => ({ ...prev, [key]: newArr }));
+                    }}>Add</Button>
+                  </div>
+                );
+              } else if (isCheckbox) {
+                input = (
+                  <Checkbox
+                    checked={!!value}
+                    onCheckedChange={(checked) => handleCheckboxChange(key, !!checked)}
+                    id={key}
+                  />
+                );
+              } else if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+                input = renderNestedObject(key, value as Record<string, unknown>);
+              } else if (typeof value === "string") {
+                input = <Input name={key} value={value} onChange={handleChange} type="text" />;
+              } else if (typeof value === "number") {
+                input = <Input name={key} value={value} onChange={handleChange} type="number" />;
+              } else if (typeof value === "boolean") {
+                input = (
+                  <Checkbox
+                    checked={value as boolean}
+                    onCheckedChange={(checked) => handleCheckboxChange(key, !!checked)}
+                    id={key}
+                  />
+                );
+              } else {
+                input = <Input name={key} value={JSON.stringify(value)} onChange={handleChange} type="text" />;
+              }
+              return (
+                <div key={key} className="flex flex-col">
+                  <label className="font-medium mb-1 text-sm text-gray-700" htmlFor={key}>{key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</label>
+                  {input}
+                </div>
+              );
+            })}
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 mt-8 pt-4 border-t bg-white sticky bottom-0">
         <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
+        <Button type="submit" className="bg-blue-600 text-white">Save</Button>
       </div>
     </form>
   );
@@ -197,7 +202,7 @@ function extractDataArray(data: unknown): Array<Record<string, unknown>> {
     return [];
   }
   if (data && typeof data === "object") {
-    for (const value of Object.values(data)) {
+    for (const [key, value] of Object.entries(data)) {
       if (Array.isArray(value) && value.length > 0 && typeof value[0] === "object") {
         return value as Array<Record<string, unknown>>;
       }
@@ -222,13 +227,16 @@ export default function SlugPage() {
   const [deleteIdx, setDeleteIdx] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!slug) return;
     setLoading(true);
-    fetchAPI({ endpoint: slug, method: "GET" }).then(({ data }) => {
+    fetchAPI({ endpoint: slug, method: "GET" }).then(({ data, error }) => {
+     
       const arr = extractDataArray(data);
       setApiResponse(arr);
+      setError(error);
       setLoading(false);
     });
   }, [slug]);
@@ -261,17 +269,21 @@ export default function SlugPage() {
     const id = (values as Record<string, unknown>)._id as string | undefined;
     const endpointSlug = typeof slug === 'string' ? slug : '';
     const filteredValues = filterSubmitFields(values);
-    await fetchAPI({
+    const { error } = await fetchAPI({
       endpoint: `${endpointSlug}/${id}`,
       method: "PUT",
       data: filteredValues,
       withAuth: true,
     });
-    fetchAPI({ endpoint: endpointSlug, method: "GET" }).then(({ data }) => {
-      setApiResponse(extractDataArray(data));
-    });
-    setEditIdx(null);
-    showAlert("Update successful!", "success");
+    if (error) {
+      showAlert("Failed to update: " + error, "destructive");
+    } else {
+      fetchAPI({ endpoint: endpointSlug, method: "GET" }).then(({ data }) => {
+        setApiResponse(extractDataArray(data));
+      });
+      setEditIdx(null);
+      showAlert("Update successful!", "success");
+    }
   }
 
   function handleDelete(idx: number) {
@@ -300,17 +312,21 @@ export default function SlugPage() {
   async function handleAddSave(values: Record<string, unknown>) {
     const endpointSlug = typeof slug === 'string' ? slug : '';
     const filteredValues = filterSubmitFields(values);
-    await fetchAPI({
+    const { error } = await fetchAPI({
       endpoint: endpointSlug,
       method: "POST",
       data: filteredValues,
       withAuth: true,
     });
-    fetchAPI({ endpoint: endpointSlug, method: "GET" }).then(({ data }) => {
-      setApiResponse(extractDataArray(data));
-    });
-    setAddOpen(false);
-    showAlert("Created successfully!", "success");
+    if (error) {
+      showAlert("Failed to create: " + error, "destructive");
+    } else {
+      fetchAPI({ endpoint: endpointSlug, method: "GET" }).then(({ data }) => {
+        setApiResponse(extractDataArray(data));
+      });
+      setAddOpen(false);
+      showAlert("Created successfully!", "success");
+    }
   }
 
   return (
@@ -348,6 +364,8 @@ export default function SlugPage() {
             <Skeleton className="h-8 w-full mb-2" />
             <Skeleton className="h-8 w-full mb-2" />
           </div>
+        ) : error ? (
+          <div className="p-6 text-center text-red-500">{error}</div>
         ) : apiResponse.length === 0 ? (
           <div className="p-6 text-center text-gray-500">No data found.</div>
         ) : (

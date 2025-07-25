@@ -20,6 +20,7 @@ export default function LoginPage() {
     fetchAPI({
       endpoint: "employees/login",
       method: "POST",
+      
       data: { username, password },
       revalidateSeconds: 0,
     })

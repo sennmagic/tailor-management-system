@@ -67,7 +67,7 @@ export const fetchAPI = async <TResponse = any, TData = unknown>({
   slug,
   revalidateSeconds = 10,
   withAuth = false,
-}: FetchAPIOptions<TData>): Promise<TResponse | undefined> => {
+}: FetchAPIOptions<TData>): Promise<{ data: TResponse | null; error: string | null }> => {
   // No cookies or Authorization header
   const urlParts: string[] = [API_BASE, endpoint];
   if (slug) urlParts.push(slug);
@@ -102,12 +102,14 @@ export const fetchAPI = async <TResponse = any, TData = unknown>({
     if (!response.ok) {
       const errorText = await response.text();
       const userMessage = extractAPIErrorMessage(errorText);
-      throw new Error(userMessage); // Let the component handle the error
+      return { data: null, error: userMessage };
     }
 
-    return response.json() as Promise<TResponse>;
+    const json = await response.json();
+    console.log("fetchAPI parsed json:", json);
+    return { data: json, error: null };
   } catch (error: any) {
-    throw error; // Let the component handle the error
+    return { data: null, error: error?.message || "Unknown error" };
   }
 };
 
