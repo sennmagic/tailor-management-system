@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { Alert } from "@/components/ui/alert";
 
 type AlertVariant = "success" | "destructive";
@@ -14,7 +14,21 @@ export function useAlert() {
 
 export function AlertProvider({ children }: { children: ReactNode }) {
   const [alert, setAlert] = useState<{ msg: string; variant: AlertVariant } | null>(null);
-  const showAlert = (msg: string, variant: AlertVariant = "destructive") => setAlert({ msg, variant });
+  
+  const showAlert = (msg: string, variant: AlertVariant = "destructive") => {
+    setAlert({ msg, variant });
+  };
+
+  // Auto-dismiss success messages after 3 seconds
+  useEffect(() => {
+    if (alert?.variant === "success") {
+      const timer = setTimeout(() => {
+        setAlert(null);
+      }, 3000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [alert]);
 
   return (
     <AlertContext.Provider value={{ showAlert }}>
