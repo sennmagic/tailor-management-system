@@ -8,28 +8,53 @@ import { fetchAPI } from "@/lib/apiService";
 export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setIsLoading(true);
 
     const formData = new FormData(event.currentTarget);
     const username = formData.get("username");
     const password = formData.get("password");
 
-    fetchAPI({
-      endpoint: "employees/login",
-      method: "POST",
-      
-      data: { username, password },
-      revalidateSeconds: 0,
-    })
-      .then(() => {
-        router.push("/");
-      })
-      .catch((err) => {
-        setError(err.message || "Login failed");
+    try {
+      const { data, error } = await fetchAPI({
+        endpoint: "employees/login",
+        method: "POST",
+        data: { username, password },
+        revalidateSeconds: 0,
       });
+
+      if (error) {
+        setError(error);
+        return;
+      }
+
+      if (data) {
+        console.log('Login successful:', data);
+        
+        // Check if tokens are in the response
+        if (data.tokens) {
+          // Set cookies manually if needed
+          if (data.tokens.access_token) {
+            document.cookie = `access_token=${data.tokens.access_token}; path=/; max-age=3600; secure; samesite=strict`;
+          }
+          if (data.tokens.refresh_token) {
+            document.cookie = `refresh_token=${data.tokens.refresh_token}; path=/; max-age=86400; secure; samesite=strict`;
+          }
+        }
+        
+        // Redirect to dashboard
+        router.push("/");
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Login failed";
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -45,7 +70,13 @@ export default function LoginPage() {
           <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
           <Input id="password" name="password" type="password" required className="w-full" />
         </div>
-        <button type="submit" className="w-full bg-green-600 text-white py-2 rounded">Login</button>
+        <button 
+          type="submit" 
+          disabled={isLoading}
+          className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 disabled:opacity-50"
+        >
+          {isLoading ? 'Logging in...' : 'Login'}
+        </button>
       </div>
     </form>
   );

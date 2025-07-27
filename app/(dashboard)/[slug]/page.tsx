@@ -48,27 +48,32 @@ function DynamicForm({
 
   // Helper to infer endpoint from field name
   function inferEndpoint(field: string) {
-    let base = field.replace(/Id$|Item$/i, "");
+    // Remove 'Id' suffix and convert to plural endpoint
+    const base = field.replace(/Id$/i, "");
     if (!base) return null;
-    // Lowercase and pluralize (simple pluralization)
-    base = base.charAt(0).toLowerCase() + base.slice(1);
-    if (!base.endsWith('s')) base += 's';
-    return `/api/${base}`;
+    
+    // Convert to lowercase and pluralize
+    const endpoint = base.charAt(0).toLowerCase() + base.slice(1);
+    return endpoint.endsWith('s') ? endpoint : endpoint + 's';
   }
 
   // Helper to fetch options for a field
   async function fetchLookupOptions(field: string) {
     const endpoint = inferEndpoint(field);
     if (!endpoint) return;
+    
     console.log(`Fetching lookup options for ${field} from ${endpoint}`);
     try {
       const { data: json } = await fetchAPI({ endpoint, method: 'GET' });
+      
       // Try to find the array in the response
       const arr = Array.isArray(json) ? json : (json?.data || json?.items || []);
+      
       const options = arr.map((item: any) => ({
         id: item._id || item.id,
         label: item.name || item.title || item.label || item.codeNumber || item._id || item.id
       }));
+      
       console.log(`Found ${options.length} options for ${field}:`, options);
       setLookupOptions(prev => ({ ...prev, [field]: options }));
     } catch (e) {
@@ -76,17 +81,16 @@ function DynamicForm({
     }
   }
 
-  // Fetch lookup options for all relevant fields on mount
+  // Fetch lookup options for all ID fields on mount
   useEffect(() => {
     Object.keys(data).forEach((key) => {
-      if (/Id$|Item$/i.test(key) && !lookupOptions[key]) {
+      if (/Id$/i.test(key) && !lookupOptions[key]) {
         fetchLookupOptions(key);
       }
     });
-    // eslint-disable-next-line
-  }, []);
+  }, [data, lookupOptions]);
 
-   // Get the superset template for array fields, memoized to avoid infinite loops
+  // Get the superset template for array fields, memoized to avoid infinite loops
   const arrayTemplates = useMemo(() => {
     const templates: Record<string, any> = {};
     const supersetTemplate = typeof getConsistentFormTemplate === 'function' ? getConsistentFormTemplate() : undefined;
@@ -98,7 +102,7 @@ function DynamicForm({
       });
     }
     return templates;
-  }, [getConsistentFormTemplate]);
+  }, []); // Remove getConsistentFormTemplate from dependencies to prevent infinite loops
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const { name, type, value, checked } = e.target;
@@ -115,10 +119,34 @@ function DynamicForm({
     }));
   }
 
+  // Handle dropdown selection for ID fields
+  function handleDropdownChange(fieldName: string, selectedId: string) {
+    setFormState((prev) => ({
+      ...prev,
+      [fieldName]: selectedId,
+    }));
+  }
+
   function isDateField(fieldName: string): boolean {
     const lower = fieldName.toLowerCase();
     return lower === 'dob' || lower === 'date';
   }
+
+  // Check if field is an ID field that should show dropdown
+  function isIdField(fieldName: string): boolean {
+    return /Id$/i.test(fieldName);
+  }
+
+  // Get display label for ID field
+  function getDisplayLabel(fieldName: string, value: unknown): string {
+    if (!value) return `Select ${fieldName.replace(/Id$/i, '').replace(/_/g, ' ').toLowerCase()}`;
+    
+    const options = lookupOptions[fieldName] || [];
+    const option = options.find(opt => opt.id === value);
+    return option ? option.label : String(value);
+  }
+
+
 
   function formatDateForInput(dateValue: unknown): string {
     if (!dateValue) return '';
@@ -180,13 +208,9 @@ function DynamicForm({
                     </Popover>
                   ) : (
                     // Check if this is a lookup field in nested object
-                    /Id$|Item$/i.test(subKey) && lookupOptions[subKey] ? (
+                    isIdField(subKey) && lookupOptions[subKey] ? (
                       <select
-                        value={
-                          subValue === null || subValue === undefined
-                            ? ""
-                            : String(subValue)
-                        }
+                        value={subValue === null || subValue === undefined ? "" : String(subValue)}
                         onChange={(e) => {
                           setFormState(prev => ({
                             ...prev,
@@ -195,7 +219,7 @@ function DynamicForm({
                         }}
                         className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
                       >
-                        <option value="">Select {subKey.replace(/_/g, " ").toLowerCase()}</option>
+                        <option value="">{`Select ${subKey.replace(/Id$/i, '').replace(/_/g, ' ').toLowerCase()}`}</option>
                         {lookupOptions[subKey].map((option) => (
                           <option key={option.id} value={option.id}>
                             {option.label}
@@ -314,31 +338,20 @@ function DynamicForm({
                   </Popover>
                 ) : typeof value === "string" ? (
                   // Check if this is a lookup field (ends with Id or Item)
-                  /Id$|Item$/i.test(key) && lookupOptions[key] ? (
-                    lookupOptions[key] ? (
-                      <select
-                        name={key}
-                        value={value as string}
-                        onChange={(e) => {
-                          setFormState(prev => ({
-                            ...prev,
-                            [key]: e.target.value
-                          }));
-                        }}
-                        className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
-                      >
-                        <option value="">Select {key.replace(/_/g, " ").toLowerCase()}</option>
-                        {lookupOptions[key].map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <select disabled className="h-14 w-full text-xl px-6 border border-gray-300 rounded-md bg-gray-100 text-gray-400">
-                        <option>Loading...</option>
-                      </select>
-                    )
+                  isIdField(key) && lookupOptions[key] ? (
+                    <select
+                      name={key}
+                      value={value as string}
+                      onChange={(e) => handleDropdownChange(key, e.target.value)}
+                      className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
+                    >
+                      <option value="">{`Select ${key.replace(/Id$/i, '').replace(/_/g, ' ').toLowerCase()}`}</option>
+                      {lookupOptions[key].map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
                     <Input 
                       name={key} 
@@ -460,7 +473,7 @@ function DynamicForm({
                       </thead>
                       <tbody>
                         {arr.length === 0 ? (
-                          <tr><td colSpan={subKeys.length + 1} className="text-center text-gray-400 py-6">No items. Click "+ Add Item" to add.</td></tr>
+                          <tr><td colSpan={subKeys.length + 1} className="text-center text-gray-400 py-6">No items. Click &quot;+ Add Item&quot; to add.</td></tr>
                         ) : (
                           arr.map((item, idx) => (
                             <tr key={idx} className="hover:bg-gray-50">
@@ -495,13 +508,9 @@ function DynamicForm({
                                     </Popover>
                                   ) : (
                                     // Check if this is a lookup field in array table
-                                    /Id$|Item$/i.test(subKey) && lookupOptions[subKey] ? (
+                                    isIdField(subKey) && lookupOptions[subKey] ? (
                                       <select
-                                        value={
-                                          item[subKey] === null || item[subKey] === undefined
-                                            ? ""
-                                            : String(item[subKey])
-                                        }
+                                        value={item[subKey] === null || item[subKey] === undefined ? "" : String(item[subKey])}
                                         onChange={e => {
                                           const newArr = [...(arr as Array<Record<string, unknown>>)]
                                           newArr[idx][subKey] = e.target.value;
@@ -509,7 +518,7 @@ function DynamicForm({
                                         }}
                                         className="h-20 w-full text-2xl px-12 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
                                       >
-                                        <option value="">Select {subKey.replace(/_/g, " ").toLowerCase()}</option>
+                                        <option value="">{`Select ${subKey.replace(/Id$/i, '').replace(/_/g, ' ').toLowerCase()}`}</option>
                                         {lookupOptions[subKey].map((option) => (
                                           <option key={option.id} value={option.id}>
                                             {option.label}
@@ -601,6 +610,204 @@ function extractDataArray(data: unknown): Array<Record<string, unknown>> {
 
 const SKIP_FIELDS = ["updatedAt", "createdAt", "__v", "_id", "isDeleted"];
 
+function ViewDetailsModal({ 
+  data, 
+  open, 
+  onClose 
+}: { 
+  data: Record<string, unknown> | null, 
+  open: boolean, 
+  onClose: () => void 
+}) {
+  if (!open || !data) return null;
+
+  // Helper function to format field names
+  function formatFieldName(key: string): string {
+    return key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+  }
+
+  // Helper function to format values
+  function formatValue(value: unknown): string {
+    if (value == null || value === undefined) return "Not specified";
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    if (typeof value === "string" && value.trim() === "") return "Not specified";
+    if (typeof value === "object" && value !== null) {
+      if (Array.isArray(value)) {
+        return value.length === 0 ? "No items" : `${value.length} item(s)`;
+      }
+      if (Object.keys(value).length === 0) return "No data";
+      return "Object data";
+    }
+    return String(value);
+  }
+
+  // Helper function to check if value should be displayed
+  function shouldDisplayField(key: string, value: unknown): boolean {
+    const skipFields = ["_id", "__v", "createdAt", "updatedAt", "isDeleted"];
+    if (skipFields.includes(key)) return false;
+    if (value === null || value === undefined) return false;
+    if (typeof value === "string" && value.trim() === "") return false;
+    return true;
+  }
+
+  // Helper function to check if field is a date field
+  function isDateField(fieldName: string): boolean {
+    const lower = fieldName.toLowerCase();
+    return lower === 'dob' || lower === 'date' || lower.includes('date') || lower.includes('time');
+  }
+
+  // Group fields by category
+  const basicFields: [string, unknown][] = [];
+  const dateFields: [string, unknown][] = [];
+  const objectFields: [string, unknown][] = [];
+  const arrayFields: [string, unknown][] = [];
+
+  Object.entries(data).forEach(([fieldKey, value]) => {
+    if (!shouldDisplayField(fieldKey, value)) return;
+    
+    if (Array.isArray(value)) {
+      arrayFields.push([fieldKey, value]);
+    } else if (typeof value === "object" && value !== null) {
+      objectFields.push([fieldKey, value]);
+    } else if (isDateField(fieldKey)) {
+      dateFields.push([fieldKey, value]);
+    } else {
+      basicFields.push([fieldKey, value]);
+    }
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 bg-white">
+      {/* Header */}
+      <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white shadow-sm">
+        <h2 className="text-2xl font-semibold text-gray-900">Item Details</h2>
+        <button 
+          onClick={onClose} 
+          className="text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
+        >
+          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="p-8 overflow-y-auto h-[calc(100vh-120px)]">
+        {/* Basic Information */}
+        {basicFields.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-1 h-6 bg-blue-500 rounded-full"></div>
+              <h3 className="text-lg font-semibold text-gray-800">Basic Information</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {basicFields.map(([key, value]) => (
+                <div key={key} className="bg-gray-50 rounded-lg p-4">
+                  <div className="text-sm font-medium text-gray-600 mb-1">
+                    {formatFieldName(key)}
+                  </div>
+                  <div className="text-base text-gray-900">
+                    {formatValue(value)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Date Information */}
+        {dateFields.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-1 h-6 bg-green-500 rounded-full"></div>
+              <h3 className="text-lg font-semibold text-gray-800">Date Information</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {dateFields.map(([key, value]) => (
+                <div key={key} className="bg-gray-50 rounded-lg p-4">
+                  <div className="text-sm font-medium text-gray-600 mb-1">
+                    {formatFieldName(key)}
+                  </div>
+                  <div className="text-base text-gray-900">
+                    {formatValue(value)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Object Data */}
+        {objectFields.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-1 h-6 bg-purple-500 rounded-full"></div>
+              <h3 className="text-lg font-semibold text-gray-800">Additional Data</h3>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {objectFields.map(([key, value]) => (
+                <div key={key} className="bg-gray-50 rounded-lg p-4">
+                  <div className="text-sm font-medium text-gray-600 mb-2">
+                    {formatFieldName(key)}
+                  </div>
+                  <div className="bg-white rounded border p-3 text-sm text-gray-700 font-mono max-h-64 overflow-y-auto">
+                    {JSON.stringify(value, null, 2)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Array Data */}
+        {arrayFields.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-1 h-6 bg-orange-500 rounded-full"></div>
+              <h3 className="text-lg font-semibold text-gray-800">List Items</h3>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {arrayFields.map(([key, value]) => (
+                <div key={key} className="bg-gray-50 rounded-lg p-4">
+                  <div className="text-sm font-medium text-gray-600 mb-2">
+                    {formatFieldName(key)} ({Array.isArray(value) ? value.length : 0} items)
+                  </div>
+                  {Array.isArray(value) && value.length > 0 && (
+                    <div className="bg-white rounded border p-3">
+                      <div className="text-sm text-gray-700 font-mono max-h-64 overflow-y-auto">
+                        {JSON.stringify(value, null, 2)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* No data message */}
+        {basicFields.length === 0 && dateFields.length === 0 && 
+         objectFields.length === 0 && arrayFields.length === 0 && (
+          <div className="text-center py-8">
+            <div className="text-gray-400 text-lg">No details available</div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="flex justify-end p-6 border-t border-gray-200 bg-white shadow-sm">
+        <Button 
+          onClick={onClose}
+          variant="outline"
+          className="px-6"
+        >
+          Close
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function SlugPage() {
   const params = useParams();
   let slug = params.slug as string | undefined;
@@ -626,10 +833,13 @@ export default function SlugPage() {
     });
   }, [slug]);
 
-  let allKeys: string[] = apiResponse[0] ? Object.keys(apiResponse[0]).slice(0, 4) : [];
-  if (allKeys.length === 0 && apiResponse.length > 0) {
-    allKeys = ["value"];
-  }
+  const allKeys = useMemo(() => {
+    const keys = apiResponse[0] ? Object.keys(apiResponse[0]).slice(0, 4) : [];
+    if (keys.length === 0 && apiResponse.length > 0) {
+      return ["value"];
+    }
+    return keys;
+  }, [apiResponse]);
 
   function renderCellValue(value: unknown) {
     if (value == null) return <span className="text-gray-400">-</span>;
@@ -691,14 +901,9 @@ export default function SlugPage() {
         setDeleteIdx(null);
         showAlert("Deleted successfully!", "success");
       }
-    } catch (err) {
+    } catch {
       showAlert("Failed to delete item", "destructive");
     }
-  }
-
-  function isDateField(fieldName: string): boolean {
-    const lower = fieldName.toLowerCase();
-    return lower === 'dob' || lower === 'date';
   }
 
   // Build a superset of all keys (recursively) from all items in apiResponse
@@ -883,12 +1088,11 @@ export default function SlugPage() {
           </Table>
         )}
       </div>
-      <Modal open={viewIdx !== null} onClose={() => setViewIdx(null)}>
-        <h2 className="text-lg font-semibold mb-2">Row Details</h2>
-        <pre className="bg-gray-100 rounded p-4 text-xs overflow-x-auto max-h-96">
-          {viewIdx !== null ? JSON.stringify(apiResponse[viewIdx], null, 2) : ""}
-        </pre>
-      </Modal>
+      <ViewDetailsModal 
+        data={viewIdx !== null ? apiResponse[viewIdx] : null}
+        open={viewIdx !== null}
+        onClose={() => setViewIdx(null)}
+      />
       <Modal open={editIdx !== null} onClose={() => setEditIdx(null)}>
         <h2 className="text-lg font-semibold mb-2">Edit Row</h2>
         {editIdx !== null && (

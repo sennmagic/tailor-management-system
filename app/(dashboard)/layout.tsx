@@ -1,10 +1,16 @@
+
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { AlertProvider } from "@/components/ui/alertProvider";
+import { EmployeeProvider } from "@/components/context/EmployeeContext";
+import { fetchAPI } from "@/lib/apiService";
 
-export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
+export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AlertProvider>
-      <DashboardLayout>{children}</DashboardLayout>
-    </AlertProvider>
+
+      <EmployeeProvider>
+        <AlertProvider>
+          <DashboardLayout>{children}</DashboardLayout>
+        </AlertProvider>
+      </EmployeeProvider>
   );
 } 
