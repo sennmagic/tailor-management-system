@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import { fetchAPI } from "@/lib/apiService";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAlert } from "@/components/ui/alertProvider";
-import { MdVisibility, MdEdit, MdDelete } from "react-icons/md";
+import { MdVisibility, MdEdit, MdDelete, MdDownload } from "react-icons/md";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,7 +15,7 @@ import Link from "next/link";
 // Date picker components
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function Modal({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -34,12 +34,14 @@ function DynamicForm({
   data, 
   onSubmit, 
   onCancel, 
-  getConsistentFormTemplate 
+  getConsistentFormTemplate,
+  isLoading = false
 }: { 
   data: Record<string, unknown>, 
   onSubmit: (values: Record<string, unknown>) => void, 
   onCancel: () => void,
-  getConsistentFormTemplate: () => any
+  getConsistentFormTemplate: () => any,
+  isLoading?: boolean
 }) {
   const [formState, setFormState] = useState<Record<string, unknown>>({ ...data });
 
@@ -137,6 +139,16 @@ function DynamicForm({
     return /Id$/i.test(fieldName);
   }
 
+  // Check if field is a status field that should show status dropdown
+  function isStatusField(fieldName: string): boolean {
+    return fieldName.toLowerCase() === 'status';
+  }
+
+  // Check if status field exists in the data template
+  function hasStatusField(): boolean {
+    return Object.keys(data).some(key => key.toLowerCase() === 'status');
+  }
+
   // Get display label for ID field
   function getDisplayLabel(fieldName: string, value: unknown): string {
     if (!value) return `Select ${fieldName.replace(/Id$/i, '').replace(/_/g, ' ').toLowerCase()}`;
@@ -225,6 +237,27 @@ function DynamicForm({
                             {option.label}
                           </option>
                         ))}
+                      </select>
+                    ) : isStatusField(subKey) && hasStatusField() ? (
+                      <select
+                        value={subValue === null || subValue === undefined ? "" : String(subValue)}
+                        onChange={(e) => {
+                          setFormState(prev => ({
+                            ...prev,
+                            [parentKey]: { ...prev[parentKey] as Record<string, unknown>, [subKey]: e.target.value }
+                          }));
+                        }}
+                        className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
+                      >
+                        <option value="">Select Status</option>
+                        <option value="pending">Pending</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
                       </select>
                     ) : (
                       <Input
@@ -351,6 +384,25 @@ function DynamicForm({
                           {option.label}
                         </option>
                       ))}
+                    </select>
+                  ) : isStatusField(key) && hasStatusField() ? (
+                    <select
+                      name={key}
+                      value={value as string}
+                      onChange={(e) => {
+                        setFormState(prev => ({ ...prev, [key]: e.target.value }));
+                      }}
+                      className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
+                    >
+                      <option value="">Select Status</option>
+                      <option value="pending">Pending</option>
+                      <option value="in-progress">In Progress</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
                     </select>
                   ) : (
                     <Input 
@@ -576,11 +628,29 @@ function DynamicForm({
       )}
 
       <div className="flex justify-end gap-3 pt-6 border-t border-gray-200 px-12 pb-12 mt-auto">
-        <Button type="button" variant="outline" onClick={onCancel} className="px-8 py-3 text-lg">
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={onCancel}
+          disabled={isLoading}
+          className="px-6 py-3 text-lg"
+        >
           Cancel
         </Button>
-        <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg">
-          Save Changes
+        <Button 
+          type="submit" 
+          onClick={handleSubmit}
+          disabled={isLoading}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 text-lg"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              Saving...
+            </>
+          ) : (
+            'Save'
+          )}
         </Button>
       </div>
     </form>
@@ -656,7 +726,93 @@ function ViewDetailsModal({
     return lower === 'dob' || lower === 'date' || lower.includes('date') || lower.includes('time');
   }
 
+  // Helper function to check if field is a status field
+  function isStatusField(fieldName: string): boolean {
+    const lower = fieldName.toLowerCase();
+    // Check for exact matches
+    if (lower === 'status') return true;
+    
+    // Check for compound words containing 'status' (like PaymentStatus, OrderStatus, etc.)
+    if (lower.includes('status')) return true;
+    
+    // Check for payment-related fields
+    if (lower.includes('payment')) return true;
+    
+    // Check for state-related fields
+    if (lower.includes('state')) return true;
+    
+    // Check for common status-like fields
+    const statusKeywords = ['condition', 'phase', 'stage', 'mode', 'type'];
+    return statusKeywords.some(keyword => lower.includes(keyword));
+  }
+
+  // Helper function to get status badge styling
+  function getStatusBadgeStyle(status: string): { bg: string; text: string; border: string; icon?: string } {
+    const lowerStatus = status.toLowerCase();
+    
+    // Success/Positive statuses
+    if (lowerStatus.includes('paid') || lowerStatus.includes('completed') || lowerStatus.includes('approved') || 
+        lowerStatus.includes('active') || lowerStatus.includes('success') || lowerStatus.includes('done') ||
+        lowerStatus.includes('finished') || lowerStatus.includes('delivered') || lowerStatus.includes('confirmed')) {
+      return { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200', icon: '✓' };
+    }
+    
+    // Warning/Pending statuses
+    if (lowerStatus.includes('pending') || lowerStatus.includes('processing') || lowerStatus.includes('waiting') ||
+        lowerStatus.includes('on-hold') || lowerStatus.includes('scheduled') || lowerStatus.includes('draft')) {
+      return { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200', icon: '⏳' };
+    }
+    
+    // Error/Failed statuses
+    if (lowerStatus.includes('failed') || lowerStatus.includes('cancelled') || lowerStatus.includes('rejected') || 
+        lowerStatus.includes('inactive') || lowerStatus.includes('error') || lowerStatus.includes('declined') ||
+        lowerStatus.includes('expired') || lowerStatus.includes('void')) {
+      return { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200', icon: '✗' };
+    }
+    
+    // Progress/Partial statuses
+    if (lowerStatus.includes('progress') || lowerStatus.includes('partial') || lowerStatus.includes('in-progress') ||
+        lowerStatus.includes('ongoing') || lowerStatus.includes('running') || lowerStatus.includes('working')) {
+      return { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200', icon: '⟳' };
+    }
+    
+    // Info/Neutral statuses
+    if (lowerStatus.includes('info') || lowerStatus.includes('new') || lowerStatus.includes('created') ||
+        lowerStatus.includes('submitted') || lowerStatus.includes('received')) {
+      return { bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-200', icon: 'ℹ' };
+    }
+    
+    // Default gray for unknown statuses
+    return { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-200', icon: '•' };
+  }
+
+  // Helper function to format status value with badge
+  function formatStatusValue(value: unknown): React.ReactNode {
+    if (value == null || value === undefined || value === '') return "Not specified";
+    
+    const statusStr = String(value);
+    const style = getStatusBadgeStyle(statusStr);
+    
+    // Format the status text nicely
+    const formattedText = statusStr
+      .replace(/([A-Z])/g, ' $1') // Add space before capital letters
+      .replace(/-/g, ' ') // Replace hyphens with spaces
+      .replace(/_/g, ' ') // Replace underscores with spaces
+      .trim()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+    
+    return (
+      <span className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium border shadow-sm ${style.bg} ${style.text} ${style.border}`}>
+        {style.icon && <span className="text-base">{style.icon}</span>}
+        <span>{formattedText}</span>
+      </span>
+    );
+  }
+
   // Group fields by category
+  const statusFields: [string, unknown][] = [];
   const basicFields: [string, unknown][] = [];
   const dateFields: [string, unknown][] = [];
   const objectFields: [string, unknown][] = [];
@@ -669,6 +825,8 @@ function ViewDetailsModal({
       arrayFields.push([fieldKey, value]);
     } else if (typeof value === "object" && value !== null) {
       objectFields.push([fieldKey, value]);
+    } else if (isStatusField(fieldKey)) {
+      statusFields.push([fieldKey, value]);
     } else if (isDateField(fieldKey)) {
       dateFields.push([fieldKey, value]);
     } else {
@@ -693,6 +851,32 @@ function ViewDetailsModal({
 
       {/* Content */}
       <div className="p-8 overflow-y-auto h-[calc(100vh-120px)]">
+        {/* Status Information */}
+        {statusFields.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-2 h-8 bg-gradient-to-b from-indigo-500 to-purple-600 rounded-full"></div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Status Information</h3>
+                <p className="text-sm text-gray-600 mt-1">Current status and state information</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {statusFields.map(([key, value]) => (
+                <div key={key} className="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 rounded-xl p-6 border border-indigo-200 shadow-sm hover:shadow-md transition-all duration-300">
+                  <div className="text-sm font-semibold text-indigo-800 mb-3 flex items-center gap-2">
+                    <div className="w-3 h-3 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full"></div>
+                    {formatFieldName(key)}
+                  </div>
+                  <div className="text-base">
+                    {formatStatusValue(value)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Basic Information */}
         {basicFields.length > 0 && (
           <div className="mb-8">
@@ -702,8 +886,9 @@ function ViewDetailsModal({
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {basicFields.map(([key, value]) => (
-                <div key={key} className="bg-gray-50 rounded-lg p-4">
-                  <div className="text-sm font-medium text-gray-600 mb-1">
+                <div key={key} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors duration-200">
+                  <div className="text-sm font-medium text-gray-600 mb-2 flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                     {formatFieldName(key)}
                   </div>
                   <div className="text-base text-gray-900">
@@ -724,11 +909,12 @@ function ViewDetailsModal({
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {dateFields.map(([key, value]) => (
-                <div key={key} className="bg-gray-50 rounded-lg p-4">
-                  <div className="text-sm font-medium text-gray-600 mb-1">
+                <div key={key} className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 border border-green-100 hover:bg-green-100 transition-colors duration-200">
+                  <div className="text-sm font-medium text-green-700 mb-2 flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                     {formatFieldName(key)}
                   </div>
-                  <div className="text-base text-gray-900">
+                  <div className="text-base text-green-900 font-medium">
                     {formatValue(value)}
                   </div>
                 </div>
@@ -746,11 +932,12 @@ function ViewDetailsModal({
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {objectFields.map(([key, value]) => (
-                <div key={key} className="bg-gray-50 rounded-lg p-4">
-                  <div className="text-sm font-medium text-gray-600 mb-2">
+                <div key={key} className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-4 border border-purple-100 hover:bg-purple-100 transition-colors duration-200">
+                  <div className="text-sm font-medium text-purple-700 mb-3 flex items-center gap-2">
+                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
                     {formatFieldName(key)}
                   </div>
-                  <div className="bg-white rounded border p-3 text-sm text-gray-700 font-mono max-h-64 overflow-y-auto">
+                  <div className="bg-white rounded border border-purple-200 p-3 text-sm text-gray-700 font-mono max-h-64 overflow-y-auto shadow-sm">
                     {JSON.stringify(value, null, 2)}
                   </div>
                 </div>
@@ -768,12 +955,13 @@ function ViewDetailsModal({
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {arrayFields.map(([key, value]) => (
-                <div key={key} className="bg-gray-50 rounded-lg p-4">
-                  <div className="text-sm font-medium text-gray-600 mb-2">
+                <div key={key} className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-lg p-4 border border-orange-100 hover:bg-orange-100 transition-colors duration-200">
+                  <div className="text-sm font-medium text-orange-700 mb-3 flex items-center gap-2">
+                    <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
                     {formatFieldName(key)} ({Array.isArray(value) ? value.length : 0} items)
                   </div>
                   {Array.isArray(value) && value.length > 0 && (
-                    <div className="bg-white rounded border p-3">
+                    <div className="bg-white rounded border border-orange-200 p-3 shadow-sm">
                       <div className="text-sm text-gray-700 font-mono max-h-64 overflow-y-auto">
                         {JSON.stringify(value, null, 2)}
                       </div>
@@ -786,7 +974,7 @@ function ViewDetailsModal({
         )}
 
         {/* No data message */}
-        {basicFields.length === 0 && dateFields.length === 0 && 
+        {statusFields.length === 0 && basicFields.length === 0 && dateFields.length === 0 && 
          objectFields.length === 0 && arrayFields.length === 0 && (
           <div className="text-center py-8">
             <div className="text-gray-400 text-lg">No details available</div>
@@ -819,6 +1007,14 @@ export default function SlugPage() {
   const [deleteIdx, setDeleteIdx] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  
+  // Loading states for actions
+  const [isAdding, setIsAdding] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<number | null>(null);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState<number | null>(null);
+  const [isDownloading, setIsDownloading] = useState<number | null>(null);
+  const [invoicePreview, setInvoicePreview] = useState<{ url: string; customerId: string; statusData?: any } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -841,8 +1037,99 @@ export default function SlugPage() {
     return keys;
   }, [apiResponse]);
 
-  function renderCellValue(value: unknown) {
+  // Helper function to check if field is a status field
+  function isStatusField(fieldName: string): boolean {
+    const lower = fieldName.toLowerCase();
+    // Check for exact matches
+    if (lower === 'status') return true;
+    
+    // Check for compound words containing 'status' (like PaymentStatus, OrderStatus, etc.)
+    if (lower.includes('status')) return true;
+    
+    // Check for payment-related fields
+    if (lower.includes('payment')) return true;
+    
+    // Check for state-related fields
+    if (lower.includes('state')) return true;
+    
+    // Check for common status-like fields
+    const statusKeywords = ['condition', 'phase', 'stage', 'mode', 'type'];
+    return statusKeywords.some(keyword => lower.includes(keyword));
+  }
+
+  // Helper function to get status badge styling
+  function getStatusBadgeStyle(status: string): { bg: string; text: string; border: string; icon?: string } {
+    const lowerStatus = status.toLowerCase();
+    
+    // Success/Positive statuses
+    if (lowerStatus.includes('paid') || lowerStatus.includes('completed') || lowerStatus.includes('approved') || 
+        lowerStatus.includes('active') || lowerStatus.includes('success') || lowerStatus.includes('done') ||
+        lowerStatus.includes('finished') || lowerStatus.includes('delivered') || lowerStatus.includes('confirmed')) {
+      return { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200', icon: '✓' };
+    }
+    
+    // Warning/Pending statuses
+    if (lowerStatus.includes('pending') || lowerStatus.includes('processing') || lowerStatus.includes('waiting') ||
+        lowerStatus.includes('on-hold') || lowerStatus.includes('scheduled') || lowerStatus.includes('draft')) {
+      return { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200', icon: '⏳' };
+    }
+    
+    // Error/Failed statuses
+    if (lowerStatus.includes('failed') || lowerStatus.includes('cancelled') || lowerStatus.includes('rejected') || 
+        lowerStatus.includes('inactive') || lowerStatus.includes('error') || lowerStatus.includes('declined') ||
+        lowerStatus.includes('expired') || lowerStatus.includes('void')) {
+      return { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200', icon: '✗' };
+    }
+    
+    // Progress/Partial statuses
+    if (lowerStatus.includes('progress') || lowerStatus.includes('partial') || lowerStatus.includes('in-progress') ||
+        lowerStatus.includes('ongoing') || lowerStatus.includes('running') || lowerStatus.includes('working')) {
+      return { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200', icon: '⟳' };
+    }
+    
+    // Info/Neutral statuses
+    if (lowerStatus.includes('info') || lowerStatus.includes('new') || lowerStatus.includes('created') ||
+        lowerStatus.includes('submitted') || lowerStatus.includes('received')) {
+      return { bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-200', icon: 'ℹ' };
+    }
+    
+    // Default gray for unknown statuses
+    return { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-200', icon: '•' };
+  }
+
+  // Helper function to format status value with badge
+  function formatStatusValue(value: unknown): React.ReactNode {
+    if (value == null || value === undefined || value === '') return "Not specified";
+    
+    const statusStr = String(value);
+    const style = getStatusBadgeStyle(statusStr);
+    
+    // Format the status text nicely
+    const formattedText = statusStr
+      .replace(/([A-Z])/g, ' $1') // Add space before capital letters
+      .replace(/-/g, ' ') // Replace hyphens with spaces
+      .replace(/_/g, ' ') // Replace underscores with spaces
+      .trim()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+    
+    return (
+      <span className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium border shadow-sm ${style.bg} ${style.text} ${style.border}`}>
+        {style.icon && <span className="text-base">{style.icon}</span>}
+        <span>{formattedText}</span>
+      </span>
+    );
+  }
+
+  function renderCellValue(value: unknown, fieldName?: string) {
     if (value == null) return <span className="text-gray-400">-</span>;
+    
+    // If this is a status field, render it with a badge
+    if (fieldName && isStatusField(fieldName)) {
+      return formatStatusValue(value);
+    }
+    
     if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
       return String(value);
     }
@@ -861,27 +1148,35 @@ export default function SlugPage() {
   }
 
   async function handleEditSave(values: Record<string, unknown>) {
+    setIsEditing(true);
     const id = (values as Record<string, unknown>)._id as string | undefined;
     const endpointSlug = typeof slug === 'string' ? slug : '';
     const filteredValues = filterSubmitFields(values);
-    const { error } = await fetchAPI({
-      endpoint: `${endpointSlug}/${id}`,
-      method: "PUT",
-      data: filteredValues,
-      withAuth: true,
-    });
-    if (error) {
-      showAlert("Failed to update: " + error, "destructive");
-    } else {
-      fetchAPI({ endpoint: endpointSlug, method: "GET" }).then(({ data }) => {
-        setApiResponse(extractDataArray(data));
+    
+    try {
+      const { error } = await fetchAPI({
+        endpoint: `${endpointSlug}/${id}`,
+        method: "PUT",
+        data: filteredValues,
+        withAuth: true,
       });
-      setEditIdx(null);
-      showAlert("Update successful!", "success");
+      
+      if (error) {
+        showAlert("Failed to update: " + error, "destructive");
+      } else {
+        fetchAPI({ endpoint: endpointSlug, method: "GET" }).then(({ data }) => {
+          setApiResponse(extractDataArray(data));
+        });
+        setEditIdx(null);
+        showAlert("Update successful!", "success");
+      }
+    } finally {
+      setIsEditing(false);
     }
   }
 
   async function handleDelete(idx: number) {
+    setIsDeleting(idx);
     const itemToDelete = apiResponse[idx];
     const id = itemToDelete._id as string;
     const endpointSlug = typeof slug === 'string' ? slug : '';
@@ -903,6 +1198,183 @@ export default function SlugPage() {
       }
     } catch {
       showAlert("Failed to delete item", "destructive");
+    } finally {
+      setIsDeleting(null);
+    }
+  }
+
+  async function handleStatusUpdate(idx: number, newStatus: string) {
+    setIsUpdatingStatus(idx);
+    const itemToUpdate = apiResponse[idx];
+    const id = itemToUpdate._id as string;
+    const endpointSlug = typeof slug === 'string' ? slug : '';
+    
+    try {
+      const { error } = await fetchAPI({
+        endpoint: `${endpointSlug}/${id}`,
+        method: "PUT",
+        data: { status: newStatus },
+        withAuth: true,
+      });
+      
+      if (error) {
+        showAlert("Failed to update status: " + error, "destructive");
+      } else {
+        // Update local state
+        setApiResponse((prev) => 
+          prev.map((item, i) => 
+            i === idx ? { ...item, status: newStatus } : item
+          )
+        );
+        showAlert("Status updated successfully!", "success");
+      }
+    } catch {
+      showAlert("Failed to update status", "destructive");
+    } finally {
+      setIsUpdatingStatus(null);
+    }
+  }
+
+  async function handleStatusFieldUpdate(idx: number, fieldName: string, newValue: string) {
+    setIsUpdatingStatus(idx);
+    const itemToUpdate = apiResponse[idx];
+    const id = itemToUpdate._id as string;
+    const endpointSlug = typeof slug === 'string' ? slug : '';
+    
+    try {
+      const { error } = await fetchAPI({
+        endpoint: `${endpointSlug}/${id}`,
+        method: "PUT",
+        data: { [fieldName]: newValue },
+        withAuth: true,
+      });
+      
+      if (error) {
+        showAlert(`Failed to update ${fieldName}: ` + error, "destructive");
+      } else {
+        // Update local state
+        setApiResponse((prev) => 
+          prev.map((item, i) => 
+            i === idx ? { ...item, [fieldName]: newValue } : item
+          )
+        );
+        showAlert(`${fieldName.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())} updated successfully!`, "success");
+      }
+    } catch {
+      showAlert(`Failed to update ${fieldName}`, "destructive");
+    } finally {
+      setIsUpdatingStatus(null);
+    }
+  }
+
+  async function handlePreviewInvoice(idx: number) {
+    setIsDownloading(idx);
+    const itemToDownload = apiResponse[idx];
+    const customerId = itemToDownload.customerId as string;
+    
+    if (!customerId) {
+      showAlert("No customer ID found for this order", "destructive");
+      setIsDownloading(null);
+      return;
+    }
+    
+    try {
+      const { data, error } = await fetchAPI({
+        endpoint: `invoice/${customerId}`,
+        method: "GET",
+        withAuth: true,
+      });
+      
+      if (error) {
+        showAlert("Failed to load invoice preview: " + error, "destructive");
+      } else if (data && data.previewUrl) {
+        // Find status fields in the order data
+        const statusFields: Record<string, any> = {};
+        Object.entries(itemToDownload).forEach(([key, value]) => {
+          if (key.toLowerCase().includes('status')) {
+            statusFields[key] = value;
+          }
+        });
+        
+        setInvoicePreview({ 
+          url: data.previewUrl, 
+          customerId,
+          statusData: statusFields
+        });
+      } else {
+        showAlert("No preview URL received from server", "destructive");
+      }
+    } catch (error) {
+      showAlert("Failed to load invoice preview", "destructive");
+    } finally {
+      setIsDownloading(null);
+    }
+  }
+
+  async function handleDownloadReceipt(customerId: string) {
+    try {
+      const { data, error } = await fetchAPI({
+        endpoint: `invoice/${customerId}/download`,
+        method: "GET",
+        withAuth: true,
+      });
+      
+      if (error) {
+        showAlert("Failed to download receipt: " + error, "destructive");
+      } else if (data && data.downloadUrl) {
+        // Create a temporary link to download the file
+        const link = document.createElement('a');
+        link.href = data.downloadUrl;
+        link.download = `receipt-${customerId}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showAlert("Receipt downloaded successfully!", "success");
+        setInvoicePreview(null);
+      } else {
+        showAlert("No download URL received from server", "destructive");
+      }
+    } catch (error) {
+      showAlert("Failed to download receipt", "destructive");
+    }
+  }
+
+  async function handleStatusChangeInPreview(statusKey: string, newValue: string) {
+    if (!invoicePreview) return;
+    
+    try {
+      const { error } = await fetchAPI({
+        endpoint: `orders/${invoicePreview.customerId}`,
+        method: "PUT",
+        data: { [statusKey]: newValue },
+        withAuth: true,
+      });
+      
+      if (error) {
+        showAlert("Failed to update status: " + error, "destructive");
+      } else {
+        // Update local state
+        setApiResponse((prev) => 
+          prev.map((item) => 
+            item.customerId === invoicePreview.customerId 
+              ? { ...item, [statusKey]: newValue }
+              : item
+          )
+        );
+        
+        // Update preview state
+        setInvoicePreview(prev => prev ? {
+          ...prev,
+          statusData: {
+            ...prev.statusData,
+            [statusKey]: newValue
+          }
+        } : null);
+        
+        showAlert("Status updated successfully!", "success");
+      }
+    } catch (error) {
+      showAlert("Failed to update status", "destructive");
     }
   }
 
@@ -966,22 +1438,29 @@ export default function SlugPage() {
   }
 
   async function handleAddSave(values: Record<string, unknown>) {
+    setIsAdding(true);
     const endpointSlug = typeof slug === 'string' ? slug : '';
     const filteredValues = filterSubmitFields(values);
-    const { error } = await fetchAPI({
-      endpoint: endpointSlug,
-      method: "POST",
-      data: filteredValues,
-      withAuth: true,
-    });
-    if (error) {
-      showAlert("Failed to create: " + error, "destructive");
-    } else {
-      fetchAPI({ endpoint: endpointSlug, method: "GET" }).then(({ data }) => {
-        setApiResponse(extractDataArray(data));
+    
+    try {
+      const { error } = await fetchAPI({
+        endpoint: endpointSlug,
+        method: "POST",
+        data: filteredValues,
+        withAuth: true,
       });
-      setAddOpen(false);
-      showAlert("Created successfully!", "success");
+      
+      if (error) {
+        showAlert("Failed to create: " + error, "destructive");
+      } else {
+        fetchAPI({ endpoint: endpointSlug, method: "GET" }).then(({ data }) => {
+          setApiResponse(extractDataArray(data));
+        });
+        setAddOpen(false);
+        showAlert("Created successfully!", "success");
+      }
+    } finally {
+      setIsAdding(false);
     }
   }
 
@@ -1009,8 +1488,16 @@ export default function SlugPage() {
         <Button
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
           onClick={() => setAddOpen(true)}
+          disabled={isAdding}
         >
-          + Add {slug ?? 'Item'}
+          {isAdding ? (
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              Adding...
+            </div>
+          ) : (
+            `+ Add ${slug ?? 'Item'}`
+          )}
         </Button>
       </div>
       <div className="overflow-x-auto bg-white rounded shadow">
@@ -1051,7 +1538,46 @@ export default function SlugPage() {
                     className="hover:bg-blue-50 transition"
                   >
                     {allKeys.map((key) => (
-                      <TableCell key={key}>{renderCellValue(row[key])}</TableCell>
+                      <TableCell key={key}>
+                        {isStatusField(key) ? (
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              {renderCellValue(row[key], key)}
+                            </div>
+                            <select
+                              value={String(row[key] || '')}
+                              onChange={(e) => handleStatusFieldUpdate(idx, key, e.target.value)}
+                              disabled={isUpdatingStatus === idx}
+                              className="text-xs px-2 py-1 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 min-w-24"
+                              title={`Change ${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`}
+                            >
+                              <option value="">Select Status</option>
+                              <option value="pending">Pending</option>
+                              <option value="in-progress">In Progress</option>
+                              <option value="completed">Completed</option>
+                              <option value="cancelled">Cancelled</option>
+                              <option value="active">Active</option>
+                              <option value="inactive">Inactive</option>
+                              <option value="approved">Approved</option>
+                              <option value="rejected">Rejected</option>
+                              <option value="processing">Processing</option>
+                              <option value="shipped">Shipped</option>
+                              <option value="delivered">Delivered</option>
+                              <option value="returned">Returned</option>
+                              <option value="draft">Draft</option>
+                              <option value="submitted">Submitted</option>
+                              <option value="confirmed">Confirmed</option>
+                              <option value="failed">Failed</option>
+                              <option value="expired">Expired</option>
+                            </select>
+                            {isUpdatingStatus === idx && (
+                              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                            )}
+                          </div>
+                        ) : (
+                          renderCellValue(row[key], key)
+                        )}
+                      </TableCell>
                     ))}
                     <TableCell>
                       <div className="flex gap-2">
@@ -1068,17 +1594,43 @@ export default function SlugPage() {
                           className="bg-yellow-400 text-xs flex items-center gap-1"
                           title="Edit"
                           size="icon"
+                          disabled={isEditing}
                         >
-                          <MdEdit className="w-4 h-4" />
+                          {isEditing && editIdx === idx ? (
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                          ) : (
+                            <MdEdit className="w-4 h-4" />
+                          )}
                         </Button>
                         <Button
                           onClick={() => setDeleteIdx(idx)}
                           className="bg-red-500 text-white text-xs flex items-center gap-1"
                           title="Delete"
                           size="icon"
+                          disabled={isDeleting === idx}
                         >
-                          <MdDelete className="w-4 h-4" />
+                          {isDeleting === idx ? (
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          ) : (
+                            <MdDelete className="w-4 h-4" />
+                          )}
                         </Button>
+                        {slug === 'orders' && (
+                          <Button
+                            onClick={() => handlePreviewInvoice(idx)}
+                            className="bg-green-500 text-white text-xs flex items-center gap-1"
+                            title="Preview Invoice"
+                            size="icon"
+                            disabled={isDownloading === idx}
+                          >
+                            {isDownloading === idx ? (
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <MdDownload className="w-4 h-4" />
+                            )}
+                          </Button>
+                        )}
+
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1101,14 +1653,34 @@ export default function SlugPage() {
             onSubmit={handleEditSave}
             onCancel={() => setEditIdx(null)}
             getConsistentFormTemplate={getConsistentFormTemplate}
+            isLoading={isEditing}
           />
         )}
       </Modal>
       <Modal open={deleteIdx !== null} onClose={() => setDeleteIdx(null)}>
         <h2 className="text-lg font-semibold mb-2">Are you sure you want to delete?</h2>
         <div className="flex gap-2 mt-4">
-          <Button onClick={() => handleDelete(deleteIdx as number)} className="bg-red-500 text-white">Yes, Delete</Button>
-          <Button variant="outline" onClick={() => setDeleteIdx(null)}>Cancel</Button>
+          <Button 
+            onClick={() => handleDelete(deleteIdx as number)} 
+            className="bg-red-500 text-white"
+            disabled={isDeleting === deleteIdx}
+          >
+            {isDeleting === deleteIdx ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Deleting...
+              </div>
+            ) : (
+              'Yes, Delete'
+            )}
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => setDeleteIdx(null)}
+            disabled={isDeleting === deleteIdx}
+          >
+            Cancel
+          </Button>
         </div>
       </Modal>
       <Modal open={addOpen} onClose={() => setAddOpen(false)}>
@@ -1118,7 +1690,86 @@ export default function SlugPage() {
           onSubmit={handleAddSave}
           onCancel={() => setAddOpen(false)}
           getConsistentFormTemplate={getConsistentFormTemplate}
+          isLoading={isAdding}
         />
+      </Modal>
+      <Modal open={invoicePreview !== null} onClose={() => setInvoicePreview(null)}>
+        <div className="w-full max-w-4xl">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">Invoice Preview</h2>
+            <button 
+              onClick={() => setInvoicePreview(null)}
+              className="text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          {invoicePreview && (
+            <>
+              {/* Status Section */}
+              {invoicePreview.statusData && Object.keys(invoicePreview.statusData).length > 0 && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                  <h3 className="text-md font-semibold mb-3 text-gray-800">Order Status</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {Object.entries(invoicePreview.statusData).map(([statusKey, statusValue]) => (
+                      <div key={statusKey} className="flex items-center gap-3">
+                        <label className="text-sm font-medium text-gray-700 min-w-24">
+                          {statusKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:
+                        </label>
+                        <select
+                          value={String(statusValue || '')}
+                          onChange={(e) => handleStatusChangeInPreview(statusKey, e.target.value)}
+                          className="flex-1 text-sm px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        >
+                          <option value="">Select Status</option>
+                          <option value="pending">Pending</option>
+                          <option value="in-progress">In Progress</option>
+                          <option value="completed">Completed</option>
+                          <option value="cancelled">Cancelled</option>
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                          <option value="approved">Approved</option>
+                          <option value="rejected">Rejected</option>
+                          <option value="processing">Processing</option>
+                          <option value="shipped">Shipped</option>
+                          <option value="delivered">Delivered</option>
+                          <option value="returned">Returned</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Invoice Preview */}
+              <div className="mb-4">
+                <iframe
+                  src={invoicePreview.url}
+                  className="w-full h-96 border border-gray-300 rounded-lg"
+                  title="Invoice Preview"
+                />
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2">
+                <Button
+                  onClick={() => handleDownloadReceipt(invoicePreview.customerId)}
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+                >
+                  Download Receipt
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setInvoicePreview(null)}
+                >
+                  Close
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
       </Modal>
     </div>
   );

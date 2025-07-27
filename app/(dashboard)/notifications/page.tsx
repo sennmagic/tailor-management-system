@@ -1,5 +1,5 @@
-"use client";
 
+"use client"
 import { NotificationList } from '@/components/ui/NotificationList';
 
 export default function NotificationsPage() {

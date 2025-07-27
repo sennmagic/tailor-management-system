@@ -4,16 +4,12 @@ import type { NextRequest } from 'next/server'
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   
-  console.log('🔍 Middleware running for path:', pathname)
   
   // Get cookies
   const refreshToken = request.cookies.get('refresh_token')
   const accessToken = request.cookies.get('access_token')
   
-  console.log('🍪 Cookies found:', {
-    refreshToken: refreshToken?.value ? 'YES' : 'NO',
-    accessToken: accessToken?.value ? 'YES' : 'NO'
-  })
+
   
   // Simple test: if no tokens and not on login page, redirect to login
   if (!refreshToken && !accessToken && pathname !== '/login') {
