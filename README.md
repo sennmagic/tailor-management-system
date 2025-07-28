@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tailor Management System
+
+A comprehensive management system built with Next.js, TypeScript, and Tailwind CSS.
+
+## Features
+
+### Enhanced Dynamic Form with Intelligent Lookup Fields
+
+The system now includes an advanced dynamic form that automatically detects and handles lookup fields based on field naming patterns:
+
+#### How Lookup Fields Work
+
+1. **Automatic Detection**: The form automatically detects fields that should be lookup dropdowns based on naming patterns:
+   - Fields ending with `Id` (e.g., `orderId`, `factoryId`, `customerId`)
+   - Fields containing relationship keywords (e.g., `customerOf`, `productFor`)
+   - Plural entity names (e.g., `customers`, `products`)
+
+2. **Dynamic API Endpoint Generation**: Based on the field name, the system generates the appropriate API endpoint:
+   - `orderId` → `/orders`
+   - `factoryId` → `/factories` 
+   - `customerId` → `/customers`
+   - `smthId` → `/smths`
+
+3. **Smart Display Field Detection**: The system automatically finds the best display field for each entity:
+   - Priority order: `name`, `title`, `label`, `displayName`, `fullName`, `codeNumber`, `code`, `number`, `orderNumber`, `reference`, `description`, `shortName`, `abbreviation`, `customerName`, `productName`, `vendorName`, `factoryName`
+   - Falls back to `Item {id}` if no display field is found
+
+4. **User-Friendly Interface**: 
+   - Shows friendly names in dropdowns (e.g., "John Doe" instead of "user_123")
+   - Stores actual IDs as values for backend compatibility
+   - Provides loading states while fetching options
+   - Handles errors gracefully
+
+#### Example Usage
+
+```json
+{
+  "orderId": "order_123",
+  "factoryId": "factory_456", 
+  "customerId": "customer_789",
+  "status": "pending"
+}
+```
+
+The form will automatically:
+- Fetch options from `/orders` for the `orderId` field
+- Fetch options from `/factories` for the `factoryId` field  
+- Fetch options from `/customers` for the `customerId` field
+- Show a status dropdown for the `status` field
+
+#### Benefits
+
+- **Zero Configuration**: No need to manually specify which fields are lookups
+- **Consistent UX**: All lookup fields behave the same way
+- **Backend Ready**: Sends IDs as values while showing friendly names
+- **Error Resilient**: Handles API failures gracefully
+- **Loading States**: Shows loading indicators while fetching options
 
 ## Getting Started
 
-First, run the development server:
-
+1. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Run the development server:
+```bash
+npm run dev
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Project Structure
 
-## Learn More
+- `app/` - Next.js app router pages and layouts
+- `components/` - Reusable UI components
+- `lib/` - Utility functions and API services
+- `public/` - Static assets
 
-To learn more about Next.js, take a look at the following resources:
+## Technologies Used
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Next.js 14** - React framework with app router
+- **TypeScript** - Type-safe JavaScript
+- **Tailwind CSS** - Utility-first CSS framework
+- **React Icons** - Icon library
+- **Lucide React** - Additional icons

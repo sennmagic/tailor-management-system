@@ -1,15 +1,16 @@
 'use client'
 
-import { ReactNode, useEffect, useState } from 'react'
+import { ReactNode, useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Search, Bell, Users, User, Calendar, Truck, Factory, Package, Ruler, DollarSign, ShoppingCart, FileText, Star, Home, Settings, Building, ShoppingBag, CreditCard, Clock, BarChart3, Layers, Database, Shield, Zap } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Avatar } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { fetchAPI } from '@/lib/apiService'
 import { useNotifications } from '@/lib/hooks/useNotifications'
+import { useRouter } from 'next/navigation'
 
 interface SidebarItem { 
   _id: string
@@ -33,6 +34,32 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [sidebarData, setSidebarData] = useState<SidebarData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const { unreadCount } = useNotifications()
+  const router = useRouter();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    if (dropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [dropdownOpen]);
+
+  const handleLogout = async () => {
+    await fetchAPI({ endpoint: 'employees/logout', method: 'POST', withAuth: true });
+    // Clear cookies if needed (optional)
+    router.push('/login');
+  };
 
     useEffect(() => {
     const fetchSidebarData = async () => {
@@ -188,9 +215,31 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 </Badge>
               )}
             </Link>
-            <Avatar>
-              <img src="/avatar.jpg" alt="User" />
-            </Avatar>
+            {/* User Avatar Dropdown */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 focus:outline-none"
+                onClick={() => setDropdownOpen((open) => !open)}
+                aria-label="User menu"
+              >
+                <Avatar>
+                  <AvatarImage src="/avatar.jpg" alt="User" />
+                  <AvatarFallback>
+                    <User className="w-6 h-6 text-gray-700" />
+                  </AvatarFallback>
+                </Avatar>
+              </button>
+              {dropdownOpen && (
+                <div className="absolute right-0 mt-2 w-40 bg-white border rounded shadow-lg z-50">
+                  <button
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
+                    onClick={handleLogout}
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 

@@ -43,54 +43,213 @@ function DynamicForm({
   getConsistentFormTemplate: () => any,
   isLoading?: boolean
 }) {
-  const [formState, setFormState] = useState<Record<string, unknown>>({ ...data });
-
-  // Dynamic lookup options cache
+  const [formState, setFormState] = useState<Record<string, unknown>>(data);
   const [lookupOptions, setLookupOptions] = useState<Record<string, Array<{ id: string; label: string }>>>({});
+  const [lookupErrors, setLookupErrors] = useState<Record<string, string>>({});
 
-  // Helper to infer endpoint from field name
-  function inferEndpoint(field: string) {
-    // Remove 'Id' suffix and convert to plural endpoint
-    const base = field.replace(/Id$/i, "");
-    if (!base) return null;
+  // Only create dropdowns for important ID fields that need good UX
+  function detectLookupField(field: string): { isLookup: boolean; endpoint?: string; displayField?: string } {
+    const lowerField = field.toLowerCase();
     
-    // Convert to lowercase and pluralize
-    const endpoint = base.charAt(0).toLowerCase() + base.slice(1);
-    return endpoint.endsWith('s') ? endpoint : endpoint + 's';
-  }
-
-  // Helper to fetch options for a field
-  async function fetchLookupOptions(field: string) {
-    const endpoint = inferEndpoint(field);
-    if (!endpoint) return;
-    
-    console.log(`Fetching lookup options for ${field} from ${endpoint}`);
-    try {
-      const { data: json } = await fetchAPI({ endpoint, method: 'GET' });
-      
-      // Try to find the array in the response
-      const arr = Array.isArray(json) ? json : (json?.data || json?.items || []);
-      
-      const options = arr.map((item: any) => ({
-        id: item._id || item.id,
-        label: item.name || item.title || item.label || item.codeNumber || item._id || item.id
-      }));
-      
-      console.log(`Found ${options.length} options for ${field}:`, options);
-      setLookupOptions(prev => ({ ...prev, [field]: options }));
-    } catch (e) {
-      console.error(`Error fetching options for ${field}:`, e);
+    // Skip _id field - it's a MongoDB ID, not a foreign key
+    if (field === '_id') {
+      return { isLookup: false };
     }
+    
+    // Pattern 1: Fields ending with 'Id', 'ID', 'id' (case insensitive) - like CustomerId, VendorId, FactoryId
+    if (/Id$/i.test(field)) {
+      let base = field.replace(/Id$/i, "");
+      
+      // Handle underscores - convert customer_id to customer
+      if (base.includes('_')) {
+        base = base.replace(/_/g, '');
+      }
+      
+      const endpoint = base.toLowerCase() + 's'; // Remove Id, make plural
+      
+      return {
+        isLookup: true,
+        endpoint: endpoint,
+        displayField: 'name' // Default to 'name', will be detected dynamically
+      };
+    }
+    
+    // Pattern 2: Fields ending with 'Name' (case insensitive) - like VendorName, CustomerName, BrandName
+    if (/Name$/i.test(field)) {
+      let base = field.replace(/Name$/i, "");
+      
+      // Handle underscores - convert customer_name to customer
+      if (base.includes('_')) {
+        base = base.replace(/_/g, '');
+      }
+      
+      const endpoint = base.toLowerCase() + 's'; // Remove Name, make plural
+      
+      return {
+        isLookup: true,
+        endpoint: endpoint,
+        displayField: 'name' // Default to 'name', will be detected dynamically
+      };
+    }
+    
+    return { isLookup: false };
   }
 
-  // Fetch lookup options for all ID fields on mount
+  // Enhanced helper to fetch options for a field
+  async function fetchLookupOptions(field: string) {
+    const lookupInfo = detectLookupField(field);
+    
+    if (!lookupInfo.isLookup || !lookupInfo.endpoint) {
+      return;
+    }
+    
+    // Try different endpoint patterns
+    let base = '';
+    if (/Id$/i.test(field)) {
+      base = field.replace(/Id$/i, "");
+    } else if (/Name$/i.test(field)) {
+      base = field.replace(/Name$/i, "");
+    }
+    
+    let cleanBase = base;
+    
+    // Handle underscores - convert customer_id to customer
+    if (cleanBase.includes('_')) {
+      cleanBase = cleanBase.replace(/_/g, '');
+    }
+    
+    const possibleEndpoints = [
+      cleanBase.toLowerCase() + 's', // customers, factories, vendors (plural only)
+    ];
+    
+    console.log(`🔄 Fetching dropdown options for ${field} → calling endpoint: /${possibleEndpoints[0]}`);
+    
+    for (const endpoint of possibleEndpoints) {
+      try {
+        const { data: json, error } = await fetchAPI({ endpoint, method: 'GET' });
+        
+        if (error) {
+          console.log(`❌ Failed to fetch from /${endpoint}:`, error);
+          continue; // Try next endpoint
+        }
+        
+        // Try to find the array in the response
+        const arr = Array.isArray(json) ? json : (json?.data || json?.items || json?.results || json?.vendorInfo || []);
+        
+        if (!Array.isArray(arr) || arr.length === 0) {
+          console.log(`❌ No data found in /${endpoint}`);
+          continue; // Try next endpoint
+        }
+        
+        console.log(`📊 Raw data from /${endpoint}:`, arr);
+        
+        const options: Array<{ id: string; label: string }> = arr.map((item: any) => {
+          const id = item._id || item.id;
+          
+          if (!id) {
+            return null;
+          }
+          
+          // Dynamic display field detection - find the best field from actual data
+          let label = '';
+          
+          // First, try to find a field that contains the entity name (e.g., vendorName for VendorId)
+          const base = field.replace(/Id$/i, "").toLowerCase();
+          const entitySpecificField = base + 'Name'; // vendorName, customerName, etc.
+          
+          if (item[entitySpecificField] && typeof item[entitySpecificField] === 'string' && item[entitySpecificField].trim()) {
+            label = item[entitySpecificField].trim();
+          } else {
+            // Fallback: try common display fields
+            const commonFields = ['name', 'title', 'label', 'displayName', 'fullName'];
+            for (const displayField of commonFields) {
+              if (item[displayField] && typeof item[displayField] === 'string' && item[displayField].trim()) {
+                label = item[displayField].trim();
+                break;
+              }
+            }
+          }
+          
+          // Final fallback to ID if no display field found
+          if (!label) {
+            label = `Item ${id}`;
+          }
+          
+          return { id, label };
+        }).filter((item): item is { id: string; label: string } => item !== null); // Remove null items with proper typing
+        
+        console.log(`✅ Found ${options.length} options for ${field} from /${endpoint}:`, options);
+        setLookupOptions(prev => ({ ...prev, [field]: options }));
+        return; // Success, exit the loop
+      } catch (e) {
+        console.error(`❌ Error fetching from /${endpoint}:`, e);
+        continue; // Try next endpoint
+      }
+    }
+    
+    // If we get here, all endpoints failed
+    const endpoint = field.replace(/Id$/i, "").toLowerCase() + 's';
+    setLookupErrors(prev => ({ ...prev, [field]: `Failed to load from /${endpoint} endpoint` }));
+    setLookupOptions(prev => ({ ...prev, [field]: [] }));
+  }
+
+  // Fetch lookup options for all detected lookup fields on mount
   useEffect(() => {
+    console.log(`🔍 Processing fields for lookup detection:`, Object.keys(data));
+    console.log(`🔍 All field names:`, Object.keys(data).map(field => `${field} (ends with Id: ${/Id$/i.test(field)})`));
+    
+    // Also check nested objects for ID fields
+    const checkNestedFields = (obj: any, prefix = '') => {
+      Object.entries(obj).forEach(([key, value]) => {
+        const fullKey = prefix ? `${prefix}.${key}` : key;
+        console.log(`🔍 Checking nested field: ${fullKey} (ends with Id: ${/Id$/i.test(key)})`);
+        
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          checkNestedFields(value, fullKey);
+        } else {
+          const lookupInfo = detectLookupField(key);
+          if (lookupInfo.isLookup) {
+            console.log(`✅ Found nested lookup field: ${fullKey} → ${lookupInfo.endpoint}`);
+            fetchLookupOptions(key);
+          }
+        }
+      });
+    };
+    
+    checkNestedFields(data);
+    
     Object.keys(data).forEach((key) => {
-      if (/Id$/i.test(key) && !lookupOptions[key]) {
+      console.log(`🔍 Checking field: ${key}`);
+      const lookupInfo = detectLookupField(key);
+      console.log(`🔍 Lookup info for ${key}:`, lookupInfo);
+      if (lookupInfo.isLookup && !lookupOptions[key]) {
+        console.log(`✅ Fetching options for ${key}`);
         fetchLookupOptions(key);
+      } else if (lookupInfo.isLookup && lookupOptions[key]) {
+        console.log(`✅ Options already loaded for ${key}`);
+      } else {
+        console.log(`❌ Not fetching options for ${key} (not a lookup field or already loaded)`);
       }
     });
-  }, [data, lookupOptions]);
+  }, [data]); // Remove lookupOptions from dependencies to prevent infinite loop
+
+  // Test customers endpoint on mount
+  useEffect(() => {
+    console.log(`🧪 Testing customers endpoint manually...`);
+    fetchLookupOptions('CustomerId');
+    fetchLookupOptions('customerId');
+    fetchLookupOptions('customer_id');
+  }, []); // Only run once on mount
+
+  // Fetch friendly names for existing ID values
+  useEffect(() => {
+    Object.entries(data).forEach(async ([key, value]) => {
+      const lookupInfo = detectLookupField(key);
+      if (lookupInfo.isLookup && value && typeof value === 'string' && !lookupOptions[key]) {
+        // Skip individual _id fetching - just load the dropdown options
+      }
+    });
+  }, [data]);
 
   // Get the superset template for array fields, memoized to avoid infinite loops
   const arrayTemplates = useMemo(() => {
@@ -121,8 +280,11 @@ function DynamicForm({
     }));
   }
 
-  // Handle dropdown selection for ID fields
-  function handleDropdownChange(fieldName: string, selectedId: string) {
+  // Handle dropdown selection for ID fields - just store the ID
+  async function handleDropdownChange(fieldName: string, selectedId: string) {
+    console.log(`📝 Dropdown selection: ${fieldName} → ${selectedId}`);
+    
+    // Just store the selected ID
     setFormState((prev) => ({
       ...prev,
       [fieldName]: selectedId,
@@ -134,19 +296,70 @@ function DynamicForm({
     return lower === 'dob' || lower === 'date';
   }
 
-  // Check if field is an ID field that should show dropdown
+  // Check if field is a lookup field that should show dropdown
   function isIdField(fieldName: string): boolean {
-    return /Id$/i.test(fieldName);
+    const lookupInfo = detectLookupField(fieldName);
+    return lookupInfo.isLookup;
   }
 
   // Check if field is a status field that should show status dropdown
   function isStatusField(fieldName: string): boolean {
-    return fieldName.toLowerCase() === 'status';
+    const lower = fieldName.toLowerCase();
+    
+    // Check for exact matches
+    if (lower === 'status') return true;
+    
+    // Check for compound words containing 'status' (like PaymentStatus, OrderStatus, etc.)
+    if (lower.includes('status')) return true;
+    
+    // Check for payment-related fields
+    if (lower.includes('payment')) return true;
+    
+    // Check for state-related fields
+    if (lower.includes('state')) return true;
+    
+    // Check for common status-like fields
+    const statusKeywords = ['condition', 'phase', 'stage', 'mode', 'type'];
+    return statusKeywords.some(keyword => lower.includes(keyword));
   }
 
   // Check if status field exists in the data template
   function hasStatusField(): boolean {
-    return Object.keys(data).some(key => key.toLowerCase() === 'status');
+    return Object.keys(data).some(key => isStatusField(key));
+  }
+
+  // Get dynamic status options based on field name
+  function getStatusOptions(fieldName: string): string[] {
+    const lower = fieldName.toLowerCase();
+    
+    // Common status options
+    const commonStatuses = [
+      'pending', 'in-progress', 'completed', 'cancelled',
+      'active', 'inactive', 'approved', 'rejected'
+    ];
+    
+    // Field-specific status options
+    if (lower.includes('payment')) {
+      return ['pending', 'processing', 'completed', 'failed', 'refunded', 'cancelled'];
+    }
+    
+    if (lower.includes('order')) {
+      return ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
+    }
+    
+    if (lower.includes('shipment') || lower.includes('delivery')) {
+      return ['pending', 'in-transit', 'out-for-delivery', 'delivered', 'failed', 'returned'];
+    }
+    
+    if (lower.includes('approval')) {
+      return ['pending', 'approved', 'rejected', 'under-review'];
+    }
+    
+    if (lower.includes('user') || lower.includes('account')) {
+      return ['active', 'inactive', 'suspended', 'pending-verification'];
+    }
+    
+    return commonStatuses;
   }
 
   // Get display label for ID field
@@ -156,6 +369,16 @@ function DynamicForm({
     const options = lookupOptions[fieldName] || [];
     const option = options.find(opt => opt.id === value);
     return option ? option.label : String(value);
+  }
+
+  // Get friendly field name for display
+  function getFriendlyFieldName(fieldName: string): string {
+    return fieldName
+      .replace(/Id$/i, '') // Remove 'Id' suffix
+      .replace(/([A-Z])/g, ' $1') // Add space before capital letters
+      .replace(/_/g, ' ') // Replace underscores with spaces
+      .toLowerCase()
+      .trim();
   }
 
 
@@ -220,24 +443,49 @@ function DynamicForm({
                     </Popover>
                   ) : (
                     // Check if this is a lookup field in nested object
-                    isIdField(subKey) && lookupOptions[subKey] ? (
-                      <select
-                        value={subValue === null || subValue === undefined ? "" : String(subValue)}
-                        onChange={(e) => {
-                          setFormState(prev => ({
-                            ...prev,
-                            [parentKey]: { ...prev[parentKey] as Record<string, unknown>, [subKey]: e.target.value }
-                          }));
-                        }}
-                        className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
-                      >
-                        <option value="">{`Select ${subKey.replace(/Id$/i, '').replace(/_/g, ' ').toLowerCase()}`}</option>
-                        {lookupOptions[subKey].map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.label}
+                    isIdField(subKey) ? (
+                      <div className="relative">
+                        <div className="text-xs text-blue-600 mb-1">🔍 Dynamic Lookup Detected</div>
+                        <select
+                          value={subValue === null || subValue === undefined ? "" : 
+                                 typeof subValue === 'object' && subValue !== null ? 
+                                 (subValue as any)._id || (subValue as any).id : 
+                                 String(subValue)}
+                          onChange={(e) => {
+                            const selectedId = e.target.value;
+                            setFormState(prev => ({
+                              ...prev,
+                              [parentKey]: { ...prev[parentKey] as Record<string, unknown>, [subKey]: selectedId }
+                            }));
+                          }}
+                          className={`h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border rounded-md bg-white ${
+                            lookupErrors[subKey] ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                          disabled={!lookupOptions[subKey]}
+                        >
+                          <option value="">
+                            {!lookupOptions[subKey] 
+                              ? `Loading ${getFriendlyFieldName(subKey)}...`
+                              : `Select ${getFriendlyFieldName(subKey)}`
+                            }
                           </option>
-                        ))}
-                      </select>
+                          {lookupOptions[subKey]?.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.label}
+                            </option>
+                          )) || []}
+                        </select>
+                        {!lookupOptions[subKey] && (
+                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                          </div>
+                        )}
+                        {lookupErrors[subKey] && (
+                          <div className="text-red-500 text-sm mt-1 font-medium">
+                            ❌ {lookupErrors[subKey]}
+                          </div>
+                        )}
+                      </div>
                     ) : isStatusField(subKey) && hasStatusField() ? (
                       <select
                         value={subValue === null || subValue === undefined ? "" : String(subValue)}
@@ -250,14 +498,11 @@ function DynamicForm({
                         className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
                       >
                         <option value="">Select Status</option>
-                        <option value="pending">Pending</option>
-                        <option value="in-progress">In Progress</option>
-                        <option value="completed">Completed</option>
-                        <option value="cancelled">Cancelled</option>
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                        <option value="approved">Approved</option>
-                        <option value="rejected">Rejected</option>
+                        {getStatusOptions(subKey).map((status) => (
+                          <option key={status} value={status}>
+                            {status.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          </option>
+                        ))}
                       </select>
                     ) : (
                       <Input
@@ -371,20 +616,41 @@ function DynamicForm({
                   </Popover>
                 ) : typeof value === "string" ? (
                   // Check if this is a lookup field (ends with Id or Item)
-                  isIdField(key) && lookupOptions[key] ? (
-                    <select
-                      name={key}
-                      value={value as string}
-                      onChange={(e) => handleDropdownChange(key, e.target.value)}
-                      className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
-                    >
-                      <option value="">{`Select ${key.replace(/Id$/i, '').replace(/_/g, ' ').toLowerCase()}`}</option>
-                      {lookupOptions[key].map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.label}
+                  isIdField(key) ? (
+                    <div className="relative">
+                      <div className="text-xs text-blue-600 mb-1">🔍 Dynamic Lookup Detected</div>
+                      <select
+                        name={key}
+                        value={typeof value === 'object' && value !== null ? (value as any)._id || (value as any).id : (value as string)}
+                        onChange={(e) => handleDropdownChange(key, e.target.value)}
+                        className={`h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border rounded-md bg-white ${
+                          lookupErrors[key] ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                        disabled={!lookupOptions[key]}
+                      >
+                        <option value="">
+                          {!lookupOptions[key] 
+                            ? `Loading ${getFriendlyFieldName(key)}...`
+                            : `Select ${getFriendlyFieldName(key)}`
+                          }
                         </option>
-                      ))}
-                    </select>
+                        {lookupOptions[key]?.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        )) || []}
+                      </select>
+                      {!lookupOptions[key] && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        </div>
+                      )}
+                      {lookupErrors[key] && (
+                        <div className="text-red-500 text-sm mt-1 font-medium">
+                          ❌ {lookupErrors[key]}
+                        </div>
+                      )}
+                    </div>
                   ) : isStatusField(key) && hasStatusField() ? (
                     <select
                       name={key}
@@ -395,14 +661,11 @@ function DynamicForm({
                       className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
                     >
                       <option value="">Select Status</option>
-                      <option value="pending">Pending</option>
-                      <option value="in-progress">In Progress</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="approved">Approved</option>
-                      <option value="rejected">Rejected</option>
+                      {getStatusOptions(key).map((status) => (
+                        <option key={status} value={status}>
+                          {status.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                        </option>
+                      ))}
                     </select>
                   ) : (
                     <Input 
@@ -570,7 +833,7 @@ function DynamicForm({
                                         }}
                                         className="h-20 w-full text-2xl px-12 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
                                       >
-                                        <option value="">{`Select ${subKey.replace(/Id$/i, '').replace(/_/g, ' ').toLowerCase()}`}</option>
+                                        <option value="">{`Select ${getFriendlyFieldName(subKey)}`}</option>
                                         {lookupOptions[subKey].map((option) => (
                                           <option key={option.id} value={option.id}>
                                             {option.label}
@@ -1055,6 +1318,40 @@ export default function SlugPage() {
     // Check for common status-like fields
     const statusKeywords = ['condition', 'phase', 'stage', 'mode', 'type'];
     return statusKeywords.some(keyword => lower.includes(keyword));
+  }
+
+  // Get dynamic status options based on field name
+  function getStatusOptions(fieldName: string): string[] {
+    const lower = fieldName.toLowerCase();
+    
+    // Common status options
+    const commonStatuses = [
+      'pending', 'in-progress', 'completed', 'cancelled',
+      'active', 'inactive', 'approved', 'rejected'
+    ];
+    
+    // Field-specific status options
+    if (lower.includes('payment')) {
+      return ['pending', 'processing', 'completed', 'failed', 'refunded', 'cancelled'];
+    }
+    
+    if (lower.includes('order')) {
+      return ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
+    }
+    
+    if (lower.includes('shipment') || lower.includes('delivery')) {
+      return ['pending', 'in-transit', 'out-for-delivery', 'delivered', 'failed', 'returned'];
+    }
+    
+    if (lower.includes('approval')) {
+      return ['pending', 'approved', 'rejected', 'under-review'];
+    }
+    
+    if (lower.includes('user') || lower.includes('account')) {
+      return ['active', 'inactive', 'suspended', 'pending-verification'];
+    }
+    
+    return commonStatuses;
   }
 
   // Helper function to get status badge styling
@@ -1552,23 +1849,11 @@ export default function SlugPage() {
                               title={`Change ${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`}
                             >
                               <option value="">Select Status</option>
-                              <option value="pending">Pending</option>
-                              <option value="in-progress">In Progress</option>
-                              <option value="completed">Completed</option>
-                              <option value="cancelled">Cancelled</option>
-                              <option value="active">Active</option>
-                              <option value="inactive">Inactive</option>
-                              <option value="approved">Approved</option>
-                              <option value="rejected">Rejected</option>
-                              <option value="processing">Processing</option>
-                              <option value="shipped">Shipped</option>
-                              <option value="delivered">Delivered</option>
-                              <option value="returned">Returned</option>
-                              <option value="draft">Draft</option>
-                              <option value="submitted">Submitted</option>
-                              <option value="confirmed">Confirmed</option>
-                              <option value="failed">Failed</option>
-                              <option value="expired">Expired</option>
+                              {getStatusOptions(key).map((status: string) => (
+                                <option key={status} value={status}>
+                                  {status.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                                </option>
+                              ))}
                             </select>
                             {isUpdatingStatus === idx && (
                               <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
