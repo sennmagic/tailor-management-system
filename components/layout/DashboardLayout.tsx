@@ -3,7 +3,7 @@
 import { ReactNode, useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Search, Bell, Users, User, Calendar, Truck, Factory, Package, Ruler, DollarSign, ShoppingCart, FileText, Star, Home, Settings, Building, ShoppingBag, CreditCard, Clock, BarChart3, Layers, Database, Shield, Zap } from 'lucide-react'
+import { Search, Bell, Users, User, Calendar, Truck, Factory, Package, Ruler, DollarSign, ShoppingCart, FileText, Star, Home, Settings, Building, ShoppingBag, CreditCard, Clock, BarChart3, Layers, Database, Shield, Zap, TrendingUp } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -113,6 +113,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     if (route === 'measurement') return <Ruler className="w-4 h-4" />
     if (route === 'logistics') return <Truck className="w-4 h-4" />
     if (route === 'privilege') return <Star className="w-4 h-4" />
+    if (route === 'sales') return <TrendingUp className="w-4 h-4" />
     
     // Title-based fallback icons
     if (title.includes('management')) return <Settings className="w-4 h-4" />
@@ -125,6 +126,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     if (title.includes('admin')) return <Shield className="w-4 h-4" />
     if (title.includes('system')) return <Zap className="w-4 h-4" />
     if (title.includes('layer')) return <Layers className="w-4 h-4" />
+    if (title.includes('sales')) return <TrendingUp className="w-4 h-4" />
     
     // Default icon
     return <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>

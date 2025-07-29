@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbSeparator, BreadcrumbPage } from "@/components/ui/breadcrumb";
+import { StatisticsChart } from "@/components/ui/chart";
 import Link from "next/link";
 
 // Date picker components
@@ -302,6 +303,56 @@ function DynamicForm({
     return lookupInfo.isLookup;
   }
 
+  // Check if field is a basic info field that should NOT have lookup/dropdown logic
+  function isBasicInfoField(fieldName: string): boolean {
+    const lower = fieldName.toLowerCase();
+    
+    // Dynamic pattern matching for basic info fields
+    const basicInfoPatterns = [
+      // Simple basic fields
+      'name', 'title', 'description', 'notes', 'comments',
+      'address', 'phone', 'email', 'contact', 'location',
+      'type', 'category', 'brand', 'model', 'serial',
+      'code', 'reference', 'number', 'id', 'identifier',
+      'firstname', 'lastname', 'fullname', 'username',
+      'password', 'confirmpassword', 'dob', 'birthdate',
+      'age', 'gender', 'nationality', 'city', 'state',
+      'country', 'zipcode', 'postalcode', 'website',
+      'company', 'organization', 'department', 'position',
+      'salary', 'wage', 'rate', 'price', 'cost', 'amount',
+      'quantity', 'qty', 'count', 'total', 'sum', 'average',
+      'min', 'max', 'range', 'limit', 'threshold',
+      
+      // Entity names (should be text inputs, not dropdowns)
+      'customer', 'vendor', 'factory', 'employee', 'order',
+      'invoice', 'product', 'item', 'service', 'package',
+      'delivery', 'shipment', 'payment', 'receipt', 'bill',
+      'account', 'user', 'client', 'supplier', 'manufacturer',
+      'distributor', 'retailer', 'wholesaler', 'dealer'
+    ];
+    
+    // Check exact matches
+    if (basicInfoPatterns.includes(lower)) {
+      return true;
+    }
+    
+    // Dynamic pattern matching for compound names
+    // If field ends with 'Name' and doesn't end with 'Id', it's basic info
+    if (lower.endsWith('name') && !lower.endsWith('id')) {
+      return true;
+    }
+    
+    // If field contains common basic info keywords
+    const basicKeywords = ['name', 'title', 'description', 'address', 'phone', 'email', 'contact'];
+    for (const keyword of basicKeywords) {
+      if (lower.includes(keyword) && !lower.endsWith('id')) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
   // Check if field is a status field that should show status dropdown
   function isStatusField(fieldName: string): boolean {
     const lower = fieldName.toLowerCase();
@@ -442,8 +493,8 @@ function DynamicForm({
                       </PopoverContent>
                     </Popover>
                   ) : (
-                    // Check if this is a lookup field in nested object
-                    isIdField(subKey) ? (
+                    // Check if this is a lookup field in nested object (but exclude basic info fields)
+                    isIdField(subKey) && !isBasicInfoField(subKey) ? (
                       <div className="relative">
                         <div className="text-xs text-blue-600 mb-1">🔍 Dynamic Lookup Detected</div>
                         <select
@@ -615,8 +666,8 @@ function DynamicForm({
                     </PopoverContent>
                   </Popover>
                 ) : typeof value === "string" ? (
-                  // Check if this is a lookup field (ends with Id or Item)
-                  isIdField(key) ? (
+                  // Check if this is a lookup field (ends with Id or Item) but exclude basic info fields
+                  isIdField(key) && !isBasicInfoField(key) ? (
                     <div className="relative">
                       <div className="text-xs text-blue-600 mb-1">🔍 Dynamic Lookup Detected</div>
                       <select
@@ -822,8 +873,8 @@ function DynamicForm({
                                       </PopoverContent>
                                     </Popover>
                                   ) : (
-                                    // Check if this is a lookup field in array table
-                                    isIdField(subKey) && lookupOptions[subKey] ? (
+                                    // Check if this is a lookup field in array table (but exclude basic info fields)
+                                    isIdField(subKey) && !isBasicInfoField(subKey) && lookupOptions[subKey] ? (
                                       <select
                                         value={item[subKey] === null || item[subKey] === undefined ? "" : String(item[subKey])}
                                         onChange={e => {
@@ -1780,6 +1831,12 @@ export default function SlugPage() {
           )}
         </BreadcrumbList>
       </Breadcrumb>
+      
+      {/* Statistics Chart */}
+      <div className="mb-8">
+        <StatisticsChart slug={slug || ''} />
+      </div>
+      
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">{slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : 'Item'}</h1>
         <Button
