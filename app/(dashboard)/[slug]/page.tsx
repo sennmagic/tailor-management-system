@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbSeparator, BreadcrumbPage } from "@/components/ui/breadcrumb";
-
+import { DynamicForm } from "@/components/Forms/DynamicFom";
 import { OrderForm } from "@/components/ui/orderForm";
 import { OrderTable } from "@/components/ui/orderTable";
 
@@ -34,940 +34,6 @@ function Modal({ open, onClose, children }: { open: boolean; onClose: () => void
   );
 }
 
-function DynamicForm({ 
-  data, 
-  onSubmit, 
-  onCancel, 
-  getConsistentFormTemplate,
-  isLoading = false
-}: { 
-  data: Record<string, unknown>, 
-  onSubmit: (values: Record<string, unknown>) => void, 
-  onCancel: () => void,
-  getConsistentFormTemplate: () => any,
-  isLoading?: boolean
-}) {
-  const [formState, setFormState] = useState<Record<string, unknown>>(data);
-  const [lookupOptions, setLookupOptions] = useState<Record<string, Array<{ id: string; label: string }>>>({});
-  const [lookupErrors, setLookupErrors] = useState<Record<string, string>>({});
-
-  // Only create dropdowns for important ID fields that need good UX
-  function detectLookupField(field: string): { isLookup: boolean; endpoint?: string; displayField?: string } {
-    const lowerField = field.toLowerCase();
-    
-    // Skip _id field - it's a MongoDB ID, not a foreign key
-    if (field === '_id') {
-      return { isLookup: false };
-    }
-    
-    // Pattern 1: Fields ending with 'Id', 'ID', 'id' (case insensitive) - like CustomerId, VendorId, FactoryId
-    if (/Id$/i.test(field)) {
-      let base = field.replace(/Id$/i, "");
-      
-      // Handle underscores - convert customer_id to customer
-      if (base.includes('_')) {
-        base = base.replace(/_/g, '');
-      }
-      
-      const endpoint = base.toLowerCase() + 's'; // Remove Id, make plural
-      
-      return {
-        isLookup: true,
-        endpoint: endpoint,
-        displayField: 'name' // Default to 'name', will be detected dynamically
-      };
-    }
-    
-    // Pattern 2: Fields ending with 'Name' (case insensitive) - like VendorName, CustomerName, BrandName
-    if (/Name$/i.test(field)) {
-      let base = field.replace(/Name$/i, "");
-      
-      // Handle underscores - convert customer_name to customer
-      if (base.includes('_')) {
-        base = base.replace(/_/g, '');
-      }
-      
-      const endpoint = base.toLowerCase() + 's'; // Remove Name, make plural
-      
-      return {
-        isLookup: true,
-        endpoint: endpoint,
-        displayField: 'name' // Default to 'name', will be detected dynamically
-      };
-    }
-    
-    return { isLookup: false };
-  }
-
-  // Enhanced helper to fetch options for a field
-  async function fetchLookupOptions(field: string) {
-    const lookupInfo = detectLookupField(field);
-    
-    if (!lookupInfo.isLookup || !lookupInfo.endpoint) {
-      return;
-    }
-    
-    // Try different endpoint patterns
-    let base = '';
-    if (/Id$/i.test(field)) {
-      base = field.replace(/Id$/i, "");
-    } else if (/Name$/i.test(field)) {
-      base = field.replace(/Name$/i, "");
-    }
-    
-    let cleanBase = base;
-    
-    // Handle underscores - convert customer_id to customer
-    if (cleanBase.includes('_')) {
-      cleanBase = cleanBase.replace(/_/g, '');
-    }
-    
-    const possibleEndpoints = [
-      cleanBase.toLowerCase() + 's', // customers, factories, vendors (plural only)
-    ];
-    
-    console.log(`🔄 Fetching dropdown options for ${field} → calling endpoint: /${possibleEndpoints[0]}`);
-    
-    for (const endpoint of possibleEndpoints) {
-      const { data: json, error } = await fetchAPI({ endpoint, method: 'GET' });
-      
-      if (error) {
-        console.log(`❌ Failed to fetch from /${endpoint}:`, error);
-        continue; // Try next endpoint
-      }
-      
-      // Try to find the array in the response
-      const arr = Array.isArray(json) ? json : (json?.data || json?.items || json?.results || json?.vendorInfo || []);
-      
-      if (!Array.isArray(arr) || arr.length === 0) {
-        console.log(`❌ No data found in /${endpoint}`);
-        continue; // Try next endpoint
-      }
-      
-      console.log(`📊 Raw data from /${endpoint}:`, arr);
-      
-      const options: Array<{ id: string; label: string }> = arr.map((item: any) => {
-        const id = item._id || item.id;
-        
-        if (!id) {
-          return null;
-        }
-        
-        // Dynamic display field detection - find the best field from actual data
-        let label = '';
-        
-        // First, try to find a field that contains the entity name (e.g., vendorName for VendorId)
-        const base = field.replace(/Id$/i, "").toLowerCase();
-        const entitySpecificField = base + 'Name'; // vendorName, customerName, etc.
-        
-        if (item[entitySpecificField] && typeof item[entitySpecificField] === 'string' && item[entitySpecificField].trim()) {
-          label = item[entitySpecificField].trim();
-        } else {
-          // Fallback: try common display fields
-          const commonFields = ['name', 'title', 'label', 'displayName', 'fullName'];
-          for (const displayField of commonFields) {
-            if (item[displayField] && typeof item[displayField] === 'string' && item[displayField].trim()) {
-              label = item[displayField].trim();
-              break;
-            }
-          }
-        }
-        
-        // Final fallback to ID if no display field found
-        if (!label) {
-          label = `Item ${id}`;
-        }
-        
-        return { id, label };
-      }).filter((item): item is { id: string; label: string } => item !== null); // Remove null items with proper typing
-      
-      console.log(`✅ Found ${options.length} options for ${field} from /${endpoint}:`, options);
-      setLookupOptions(prev => ({ ...prev, [field]: options }));
-      return; // Success, exit the loop
-    }
-    
-    // If we get here, all endpoints failed
-    const endpoint = field.replace(/Id$/i, "").toLowerCase() + 's';
-    setLookupErrors(prev => ({ ...prev, [field]: `Failed to load from /${endpoint} endpoint` }));
-    setLookupOptions(prev => ({ ...prev, [field]: [] }));
-  }
-
-  // Fetch lookup options for all detected lookup fields on mount
-  useEffect(() => {
-    console.log(`🔍 Processing fields for lookup detection:`, Object.keys(data));
-    console.log(`🔍 All field names:`, Object.keys(data).map(field => `${field} (ends with Id: ${/Id$/i.test(field)})`));
-    
-    // Also check nested objects for ID fields
-    const checkNestedFields = (obj: any, prefix = '') => {
-      Object.entries(obj).forEach(([key, value]) => {
-        const fullKey = prefix ? `${prefix}.${key}` : key;
-        console.log(`🔍 Checking nested field: ${fullKey} (ends with Id: ${/Id$/i.test(key)})`);
-        
-        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-          checkNestedFields(value, fullKey);
-        } else {
-          const lookupInfo = detectLookupField(key);
-          if (lookupInfo.isLookup) {
-            console.log(`✅ Found nested lookup field: ${fullKey} → ${lookupInfo.endpoint}`);
-            fetchLookupOptions(key);
-          }
-        }
-      });
-    };
-    
-    checkNestedFields(data);
-    
-    Object.keys(data).forEach((key) => {
-      console.log(`🔍 Checking field: ${key}`);
-      const lookupInfo = detectLookupField(key);
-      console.log(`🔍 Lookup info for ${key}:`, lookupInfo);
-      if (lookupInfo.isLookup && !lookupOptions[key]) {
-        console.log(`✅ Fetching options for ${key}`);
-        fetchLookupOptions(key);
-      } else if (lookupInfo.isLookup && lookupOptions[key]) {
-        console.log(`✅ Options already loaded for ${key}`);
-      } else {
-        console.log(`❌ Not fetching options for ${key} (not a lookup field or already loaded)`);
-      }
-    });
-  }, [data]); // Remove lookupOptions from dependencies to prevent infinite loop
-
-  // Test customers endpoint on mount
-  useEffect(() => {
-    console.log(`🧪 Testing customers endpoint manually...`);
-    fetchLookupOptions('CustomerId');
-    fetchLookupOptions('customerId');
-    fetchLookupOptions('customer_id');
-  }, []); // Only run once on mount
-
-  // Fetch friendly names for existing ID values
-  useEffect(() => {
-    Object.entries(data).forEach(async ([key, value]) => {
-      const lookupInfo = detectLookupField(key);
-      if (lookupInfo.isLookup && value && typeof value === 'string' && !lookupOptions[key]) {
-        // Skip individual _id fetching - just load the dropdown options
-      }
-    });
-  }, [data]);
-
-  // Get the superset template for array fields, memoized to avoid infinite loops
-  const arrayTemplates = useMemo(() => {
-    const templates: Record<string, any> = {};
-    const supersetTemplate = typeof getConsistentFormTemplate === 'function' ? getConsistentFormTemplate() : undefined;
-    if (supersetTemplate) {
-      Object.entries(supersetTemplate).forEach(([key, value]) => {
-        if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
-          templates[key] = value[0];
-        }
-      });
-    }
-    return templates;
-  }, []); // Remove getConsistentFormTemplate from dependencies to prevent infinite loops
-
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const { name, type, value, checked } = e.target;
-    setFormState((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }));
-  }
-
-  function handleCheckboxChange(name: string, checked: boolean) {
-    setFormState((prev) => ({
-      ...prev,
-      [name]: checked,
-    }));
-  }
-
-  // Handle dropdown selection for ID fields - just store the ID
-  async function handleDropdownChange(fieldName: string, selectedId: string) {
-    console.log(`📝 Dropdown selection: ${fieldName} → ${selectedId}`);
-    
-    // Just store the selected ID
-    setFormState((prev) => ({
-      ...prev,
-      [fieldName]: selectedId,
-    }));
-  }
-
-  function isDateField(fieldName: string): boolean {
-    const lower = fieldName.toLowerCase();
-    return lower === 'dob' || lower === 'date';
-  }
-
-  // Check if field is a lookup field that should show dropdown
-  function isIdField(fieldName: string): boolean {
-    const lookupInfo = detectLookupField(fieldName);
-    return lookupInfo.isLookup;
-  }
-
-  // Check if field is a basic info field that should NOT have lookup/dropdown logic
-  function isBasicInfoField(fieldName: string): boolean {
-    const lower = fieldName.toLowerCase();
-    
-    // Dynamic pattern matching for basic info fields
-    const basicInfoPatterns = [
-      // Simple basic fields
-      'name', 'title', 'description', 'notes', 'comments',
-      'address', 'phone', 'email', 'contact', 'location',
-      'type', 'category', 'brand', 'model', 'serial',
-      'code', 'reference', 'number', 'id', 'identifier',
-      'firstname', 'lastname', 'fullname', 'username',
-      'password', 'confirmpassword', 'dob', 'birthdate',
-      'age', 'gender', 'nationality', 'city', 'state',
-      'country', 'zipcode', 'postalcode', 'website',
-      'company', 'organization', 'department', 'position',
-      'salary', 'wage', 'rate', 'price', 'cost', 'amount',
-      'quantity', 'qty', 'count', 'total', 'sum', 'average',
-      'min', 'max', 'range', 'limit', 'threshold',
-      
-      // Entity names (should be text inputs, not dropdowns)
-      'customer', 'vendor', 'factory', 'employee', 'order',
-      'invoice', 'product', 'item', 'service', 'package',
-      'delivery', 'shipment', 'payment', 'receipt', 'bill',
-      'account', 'user', 'client', 'supplier', 'manufacturer',
-      'distributor', 'retailer', 'wholesaler', 'dealer'
-    ];
-    
-    // Check exact matches
-    if (basicInfoPatterns.includes(lower)) {
-      return true;
-    }
-    
-    // Dynamic pattern matching for compound names
-    // If field ends with 'Name' and doesn't end with 'Id', it's basic info
-    if (lower.endsWith('name') && !lower.endsWith('id')) {
-      return true;
-    }
-    
-    // If field contains common basic info keywords
-    const basicKeywords = ['name', 'title', 'description', 'address', 'phone', 'email', 'contact'];
-    for (const keyword of basicKeywords) {
-      if (lower.includes(keyword) && !lower.endsWith('id')) {
-        return true;
-      }
-    }
-    
-    return false;
-  }
-
-  // Check if field is a status field that should show status dropdown
-  function isStatusField(fieldName: string): boolean {
-    const lower = fieldName.toLowerCase();
-    
-    // Check for exact matches
-    if (lower === 'status') return true;
-    
-    // Check for compound words containing 'status' (like PaymentStatus, OrderStatus, etc.)
-    if (lower.includes('status')) return true;
-    
-    // Check for payment-related fields
-    if (lower.includes('payment')) return true;
-    
-    // Check for state-related fields
-    if (lower.includes('state')) return true;
-    
-    // Check for common status-like fields
-    const statusKeywords = ['condition', 'phase', 'stage', 'mode', 'type'];
-    return statusKeywords.some(keyword => lower.includes(keyword));
-  }
-
-  // Check if status field exists in the data template
-  function hasStatusField(): boolean {
-    return Object.keys(data).some(key => isStatusField(key));
-  }
-
-  // Get dynamic status options based on field name
-  function getStatusOptions(fieldName: string): string[] {
-    const lower = fieldName.toLowerCase();
-    
-    // Common status options
-    const commonStatuses = [
-      'pending', 'in-progress', 'completed', 'cancelled',
-      'active', 'inactive', 'approved', 'rejected'
-    ];
-    
-    // Field-specific status options
-    if (lower.includes('payment')) {
-      return ['pending', 'processing', 'completed', 'failed', 'refunded', 'cancelled'];
-    }
-    
-    if (lower.includes('order')) {
-      return ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
-    }
-    
-    if (lower.includes('shipment') || lower.includes('delivery')) {
-      return ['pending', 'in-transit', 'out-for-delivery', 'delivered', 'failed', 'returned'];
-    }
-    
-    if (lower.includes('approval')) {
-      return ['pending', 'approved', 'rejected', 'under-review'];
-    }
-    
-    if (lower.includes('user') || lower.includes('account')) {
-      return ['active', 'inactive', 'suspended', 'pending-verification'];
-    }
-    
-    return commonStatuses;
-  }
-
-  // Get display label for ID field
-  function getDisplayLabel(fieldName: string, value: unknown): string {
-    if (!value) return `Select ${fieldName.replace(/Id$/i, '').replace(/_/g, ' ').toLowerCase()}`;
-    
-    const options = lookupOptions[fieldName] || [];
-    const option = options.find(opt => opt.id === value);
-    return option ? option.label : String(value);
-  }
-
-  // Get friendly field name for display
-  function getFriendlyFieldName(fieldName: string): string {
-    return fieldName
-      .replace(/Id$/i, '') // Remove 'Id' suffix
-      .replace(/([A-Z])/g, ' $1') // Add space before capital letters
-      .replace(/_/g, ' ') // Replace underscores with spaces
-      .toLowerCase()
-      .trim();
-  }
-
-
-
-  function formatDateForInput(dateValue: unknown): string {
-    if (!dateValue) return '';
-    if (typeof dateValue === 'string') {
-      // Try to parse and format the date
-      const date = new Date(dateValue);
-      if (!isNaN(date.getTime())) {
-        return date.toISOString().split('T')[0];
-      }
-      return dateValue;
-    }
-    return '';
-  }
-
-  function renderNestedObject(parentKey: string, value: Record<string, unknown>) {
-    return (
-      <div key={parentKey} className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-          <label className="font-semibold text-gray-700 text-sm">{parentKey.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</label>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 w-full">
-          {Object.entries(value)
-            .filter(([k]) => !SKIP_FIELDS.includes(k))
-            .map(([subKey, subValue]) => {
-              if (typeof subValue === "object" && subValue !== null && !Array.isArray(subValue)) {
-                return renderNestedObject(subKey, subValue as Record<string, unknown>);
-              }
-              return (
-                <div key={subKey} className="flex flex-col w-full">
-                  <label className="text-xs font-medium text-gray-600 mb-1">{subKey.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</label>
-                  {isDateField(subKey) ? (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "h-14 w-full text-xl px-6 justify-start text-left font-normal focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200",
-                            !subValue && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-5 w-5" />
-                          {subValue ? formatDateForInput(subValue) : `Select ${subKey.replace(/_/g, " ").toLowerCase()}`}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={subValue ? new Date(subValue as string) : undefined}
-                          onSelect={(date: Date | undefined) => {
-                            setFormState(prev => ({
-                              ...prev,
-                              [parentKey]: { ...prev[parentKey] as Record<string, unknown>, [subKey]: date ? date.toISOString().split('T')[0] : '' }
-                            }));
-                          }}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  ) : (
-                    // Check if this is a lookup field in nested object (but exclude basic info fields)
-                    isIdField(subKey) && !isBasicInfoField(subKey) ? (
-                      <div className="relative">
-                        <div className="text-xs text-blue-600 mb-1">🔍 Dynamic Lookup Detected</div>
-                        <select
-                          value={subValue === null || subValue === undefined ? "" : 
-                                 typeof subValue === 'object' && subValue !== null ? 
-                                 (subValue as any)._id || (subValue as any).id : 
-                                 String(subValue)}
-                          onChange={(e) => {
-                            const selectedId = e.target.value;
-                            setFormState(prev => ({
-                              ...prev,
-                              [parentKey]: { ...prev[parentKey] as Record<string, unknown>, [subKey]: selectedId }
-                            }));
-                          }}
-                          className={`h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border rounded-md bg-white ${
-                            lookupErrors[subKey] ? 'border-red-500' : 'border-gray-300'
-                          }`}
-                          disabled={!lookupOptions[subKey]}
-                        >
-                          <option value="">
-                            {!lookupOptions[subKey] 
-                              ? `Loading ${getFriendlyFieldName(subKey)}...`
-                              : `Select ${getFriendlyFieldName(subKey)}`
-                            }
-                          </option>
-                          {lookupOptions[subKey]?.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          )) || []}
-                        </select>
-                        {!lookupOptions[subKey] && (
-                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                          </div>
-                        )}
-                        {lookupErrors[subKey] && (
-                          <div className="text-red-500 text-sm mt-1 font-medium">
-                            ❌ {lookupErrors[subKey]}
-                          </div>
-                        )}
-                      </div>
-                    ) : isStatusField(subKey) && hasStatusField() ? (
-                      <select
-                        value={subValue === null || subValue === undefined ? "" : String(subValue)}
-                        onChange={(e) => {
-                          setFormState(prev => ({
-                            ...prev,
-                            [parentKey]: { ...prev[parentKey] as Record<string, unknown>, [subKey]: e.target.value }
-                          }));
-                        }}
-                        className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
-                      >
-                        <option value="">Select Status</option>
-                        {getStatusOptions(subKey).ermap((status) => (
-                          <option key={status} value={status}>
-                            {status.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <Input
-                        name={`${parentKey}.${subKey}`}
-                        value={
-                          subValue === null || subValue === undefined
-                            ? ""
-                            : typeof subValue === "object"
-                              ? (Array.isArray(subValue) && subValue.length === 0) || (Object.keys(subValue).length === 0)
-                                ? ""
-                                : JSON.stringify(subValue)
-                              : String(subValue)
-                        }
-                        onChange={(e) => {
-                          setFormState(prev => ({
-                            ...prev,
-                            [parentKey]: { ...prev[parentKey] as Record<string, unknown>, [subKey]: e.target.value }
-                          }));
-                        }}
-                        className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        placeholder={`Enter ${subKey.replace(/_/g, " ").toLowerCase()}`}
-                      />
-                    )
-                  )}
-                </div>
-              );
-            })}
-        </div>
-      </div>
-    );
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    onSubmit(formState);
-  }
-
-  // Separate fields into different categories for better organization
-  const regularFields: [string, unknown][] = [];
-  const arrayFields: [string, unknown][] = [];
-  const objectFields: [string, unknown][] = [];
-  const checkboxFields: [string, unknown][] = [];
-
-  Object.entries(formState)
-    .filter(([key]) => !SKIP_FIELDS.includes(key))
-    .forEach(([key, value]) => {
-      const isCheckbox = key.toLowerCase() === "is" || key.toLowerCase().startsWith("is");
-      
-      if (Array.isArray(value) && value.length > 0 && typeof value[0] === "object") {
-        arrayFields.push([key, value]);
-      } else if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-        objectFields.push([key, value]);
-      } else if (isCheckbox || typeof value === "boolean") {
-        checkboxFields.push([key, value]);
-      } else {
-        regularFields.push([key, value]);
-      }
-    });
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className="fixed inset-0 z-[100] w-screen h-screen bg-white p-0 m-0 flex flex-col overflow-auto"
-      style={{ borderRadius: 0, boxShadow: 'none', maxWidth: '100vw', minWidth: '100vw', maxHeight: '100vh', minHeight: '100vh' }}
-    >
-      <div className="mb-6 px-12 pt-12">
-        <h2 className="text-3xl font-bold text-gray-900 mb-1">Edit Item</h2>
-        <p className="text-gray-500 text-lg">Update the details below to modify this record</p>
-      </div>
-
-      {/* Regular Fields Section */}
-      {regularFields.length > 0 && (
-        <div className="mb-8 px-12">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-1 h-6 bg-blue-500 rounded-full"></div>
-            <h3 className="text-xl font-semibold text-gray-800">Basic Information</h3>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full">
-            {regularFields.map(([key, value]) => (
-              <div key={key} className="flex flex-col w-full">
-                <label className="font-medium mb-2 text-base text-gray-700" htmlFor={key}>
-                  {key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
-                </label>
-                {isDateField(key) ? (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "h-14 w-full text-xl px-6 justify-start text-left font-normal focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200",
-                          !value && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-5 w-5" />
-                        {value ? formatDateForInput(value) : `Select ${key.replace(/_/g, " ").toLowerCase()}`}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={value ? new Date(value as string) : undefined}
-                        onSelect={(date: Date | undefined) => {
-                          setFormState(prev => ({
-                            ...prev,
-                            [key]: date ? date.toISOString().split('T')[0] : ''
-                          }));
-                        }}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                ) : typeof value === "string" ? (
-                  // Check if this is a lookup field (ends with Id or Item) but exclude basic info fields
-                  isIdField(key) && !isBasicInfoField(key) ? (
-                    <div className="relative">
-                      <div className="text-xs text-blue-600 mb-1">🔍 Dynamic Lookup Detected</div>
-                      <select
-                        name={key}
-                        value={typeof value === 'object' && value !== null ? (value as any)._id || (value as any).id : (value as string)}
-                        onChange={(e) => handleDropdownChange(key, e.target.value)}
-                        className={`h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border rounded-md bg-white ${
-                          lookupErrors[key] ? 'border-red-500' : 'border-gray-300'
-                        }`}
-                        disabled={!lookupOptions[key]}
-                      >
-                        <option value="">
-                          {!lookupOptions[key] 
-                            ? `Loading ${getFriendlyFieldName(key)}...`
-                            : `Select ${getFriendlyFieldName(key)}`
-                          }
-                        </option>
-                        {lookupOptions[key]?.map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.label}
-                          </option>
-                        )) || []}
-                      </select>
-                      {!lookupOptions[key] && (
-                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                          <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                        </div>
-                      )}
-                      {lookupErrors[key] && (
-                        <div className="text-red-500 text-sm mt-1 font-medium">
-                          ❌ {lookupErrors[key]}
-                        </div>
-                      )}
-                    </div>
-                  ) : isStatusField(key) && hasStatusField() ? (
-                    <select
-                      name={key}
-                      value={value as string}
-                      onChange={(e) => {
-                        setFormState(prev => ({ ...prev, [key]: e.target.value }));
-                      }}
-                      className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
-                    >
-                      <option value="">Select Status</option>
-                      {getStatusOptions(key).map((status) => (
-                        <option key={status} value={status}>
-                          {status.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <Input 
-                      name={key} 
-                      value={value} 
-                      onChange={handleChange} 
-                      type="text"
-                      className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                      placeholder={`Enter ${key.replace(/_/g, " ").toLowerCase()}`}
-                    />
-                  )
-                ) : typeof value === "number" ? (
-                  <Input 
-                    name={key} 
-                    value={value} 
-                    onChange={handleChange} 
-                    type="number"
-                    className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    placeholder={`Enter ${key.replace(/_/g, " ").toLowerCase()}`}
-                  />
-                ) : (
-                  <Input 
-                    name={key} 
-                    value={JSON.stringify(value)} 
-                    onChange={handleChange} 
-                    type="text"
-                    className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    placeholder={`Enter ${key.replace(/_/g, " ").toLowerCase()}`}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Checkbox Fields Section */}
-      {checkboxFields.length > 0 && (
-        <div className="mb-8 px-12">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-1 h-6 bg-green-500 rounded-full"></div>
-            <h3 className="text-xl font-semibold text-gray-800">Settings & Options</h3>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full">
-            {checkboxFields.map(([key, value]) => (
-              <div key={key} className="flex items-center space-x-3 p-6 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer w-full" onClick={() => handleCheckboxChange(key, !value)}>
-                <Checkbox
-                  checked={!!value}
-                  onCheckedChange={(checked) => handleCheckboxChange(key, !!checked)}
-                  id={key}
-                  className="w-6 h-6"
-                />
-                <label htmlFor={key} className="text-lg font-medium text-gray-700 cursor-pointer flex-1">
-                  {key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
-                </label>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Object Fields Section */}
-      {objectFields.length > 0 && (
-        <div className="mb-8 px-12">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-1 h-6 bg-purple-500 rounded-full"></div>
-            <h3 className="text-xl font-semibold text-gray-800">Complex Data</h3>
-          </div>
-          <div className="space-y-4 w-full">
-            {objectFields.map(([key, value]) => 
-              renderNestedObject(key, value as Record<string, unknown>)
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Array Fields Section */}
-      {Object.keys(arrayTemplates).length > 0 && (
-        <div className="mb-8 px-12">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-1 h-6 bg-orange-500 rounded-full"></div>
-            <h3 className="text-xl font-semibold text-gray-800">List Items</h3>
-          </div>
-          <div className="space-y-6 w-full">
-            {Object.entries(arrayTemplates).map(([key, template]) => {
-              const arr = (formState[key] as Array<Record<string, unknown>>) || [];
-              const subKeys = Object.keys(template).filter((k) => k !== "_id");
-              if (!subKeys.length) return null;
-              return (
-                <div key={key} className="border border-gray-200 rounded-lg p-6 w-full">
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="font-semibold text-gray-700 text-lg">{key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</label>
-                    <Button 
-                      type="button" 
-                      size="lg" 
-                      onClick={() => {
-                        const newItem = { ...template };
-                        Object.keys(newItem).forEach(k => newItem[k] = ""); // clear values
-                        const newArr = [...(arr || []), newItem];
-                        setFormState(prev => ({ ...prev, [key]: newArr }));
-                      }}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 text-lg"
-                    >
-                      + Add Item
-                    </Button>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border border-gray-200 rounded-lg text-lg shadow-sm">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          {subKeys.map((subKey) => (
-                            <th key={subKey} className="border-b border-gray-200 px-4 py-3 text-left font-medium text-gray-700">
-                              {subKey.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
-                            </th>
-                          ))}
-                          <th className="border-b border-gray-200 px-4 py-3 text-left font-medium text-gray-700 w-20">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {arr.length === 0 ? (
-                          <tr><td colSpan={subKeys.length + 1} className="text-center text-gray-400 py-6">No items. Click &quot;+ Add Item&quot; to add.</td></tr>
-                        ) : (
-                          arr.map((item, idx) => (
-                            <tr key={idx} className="hover:bg-gray-50">
-                              {subKeys.map((subKey) => (
-                                <td key={subKey} className="border-b border-gray-100 px-4 py-3">
-                                  {isDateField(subKey) ? (
-                                    <Popover>
-                                      <PopoverTrigger asChild>
-                                        <Button
-                                          variant="outline"
-                                          className={cn(
-                                            "h-20 w-full text-2xl px-12 justify-start text-left font-normal focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200",
-                                            !item[subKey] && "text-muted-foreground"
-                                          )}
-                                        >
-                                          <CalendarIcon className="mr-2 h-6 w-6" />
-                                          {item[subKey] ? formatDateForInput(item[subKey]) : `Select ${subKey.replace(/_/g, " ").toLowerCase()}`}
-                                        </Button>
-                                      </PopoverTrigger>
-                                      <PopoverContent className="w-auto p-0" align="start">
-                                        <Calendar
-                                          mode="single"
-                                          selected={item[subKey] ? new Date(item[subKey] as string) : undefined}
-                                          onSelect={(date: Date | undefined) => {
-                                            const newArr = [...(arr as Array<Record<string, unknown>>)]
-                                            newArr[idx][subKey] = date ? date.toISOString().split('T')[0] : '';
-                                            setFormState(prev => ({ ...prev, [key]: newArr }));
-                                          }}
-                                          initialFocus
-                                        />
-                                      </PopoverContent>
-                                    </Popover>
-                                  ) : (
-                                    // Check if this is a lookup field in array table (but exclude basic info fields)
-                                    isIdField(subKey) && !isBasicInfoField(subKey) && lookupOptions[subKey] ? (
-                                      <select
-                                        value={item[subKey] === null || item[subKey] === undefined ? "" : String(item[subKey])}
-                                        onChange={e => {
-                                          const newArr = [...(arr as Array<Record<string, unknown>>)]
-                                          newArr[idx][subKey] = e.target.value;
-                                          setFormState(prev => ({ ...prev, [key]: newArr }));
-                                        }}
-                                        className="h-20 w-full text-2xl px-12 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
-                                      >
-                                        <option value="">{`Select ${getFriendlyFieldName(subKey)}`}</option>
-                                        {lookupOptions[subKey].map((option) => (
-                                          <option key={option.id} value={option.id}>
-                                            {option.label}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    ) : (
-                                      <Input
-                                        value={
-                                          item[subKey] === null || item[subKey] === undefined
-                                            ? ""
-                                            : typeof item[subKey] === "object"
-                                              ? (Array.isArray(item[subKey]) && item[subKey].length === 0) || (Object.keys(item[subKey]).length === 0)
-                                                ? ""
-                                                : JSON.stringify(item[subKey])
-                                              : String(item[subKey])
-                                        }
-                                        onChange={e => {
-                                          const newArr = [...(arr as Array<Record<string, unknown>>)]
-                                          newArr[idx][subKey] = e.target.value;
-                                          setFormState(prev => ({ ...prev, [key]: newArr }));
-                                        }}
-                                        className="h-20 w-full text-2xl px-12 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                                        placeholder={`Enter ${subKey.replace(/_/g, " ").toLowerCase()}`}
-                                      />
-                                    )
-                                  )}
-                                </td>
-                              ))}
-                              <td className="border-b border-gray-100 px-4 py-3">
-                                <Button 
-                                  type="button" 
-                                  variant="outline" 
-                                  size="lg"
-                                  onClick={() => {
-                                    const newArr = (arr as Array<Record<string, unknown>>).filter((_, i) => i !== idx);
-                                    setFormState(prev => ({ ...prev, [key]: newArr }));
-                                  }}
-                                  className="text-red-500 hover:text-red-700 hover:bg-red-50 px-4 py-2 text-lg"
-                                >
-                                  Remove
-                                </Button>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <div className="flex justify-end gap-3 pt-6 border-t border-gray-200 px-12 pb-12 mt-auto">
-        <Button 
-          type="button" 
-          variant="outline" 
-          onClick={onCancel}
-          disabled={isLoading}
-          className="px-6 py-3 text-lg"
-        >
-          Cancel
-        </Button>
-        <Button 
-          type="submit" 
-          onClick={handleSubmit}
-          disabled={isLoading}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 text-lg"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin mr-2" />
-              Saving...
-            </>
-          ) : (
-            'Save'
-          )}
-        </Button>
-      </div>
-    </form>
-  );
-}
 
 function extractDataArray(data: unknown): Array<Record<string, unknown>> {
   if (Array.isArray(data)) {
@@ -1207,7 +273,7 @@ function ViewDetailsModal({
     }
     
     // Success/Positive statuses
-    if (lowerStatus.includes('completed') || lowerStatus.includes('approved') || 
+    if (lowerStatus.includes('Paid') || lowerStatus.includes('approved') || 
         lowerStatus.includes('active') || lowerStatus.includes('success') || lowerStatus.includes('done') ||
         lowerStatus.includes('finished') || lowerStatus.includes('confirmed')) {
       return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: '✓' };
@@ -1533,13 +599,13 @@ export default function SlugPage() {
     
     // Common status options
     const commonStatuses = [
-      'pending', 'in-progress', 'completed', 'cancelled',
+      'Paid', 'in-Unpaid', 'Paid', 'cancelled',
       'active', 'inactive', 'approved', 'rejected'
     ];
     
     // Field-specific status options
     if (lower.includes('payment')) {
-      return ['pending', 'processing', 'completed', 'failed', 'refunded', 'cancelled'];
+      return ['pending', 'processing', 'Paid', 'failed', 'refunded', 'cancelled'];
     }
     
     if (lower.includes('order')) {
@@ -1597,7 +663,7 @@ export default function SlugPage() {
     }
     
     // Success/Positive statuses
-    if (lowerStatus.includes('completed') || lowerStatus.includes('approved') || 
+    if (lowerStatus.includes('Paid') || lowerStatus.includes('approved') || 
         lowerStatus.includes('active') || lowerStatus.includes('success') || lowerStatus.includes('done') ||
         lowerStatus.includes('finished') || lowerStatus.includes('confirmed')) {
       return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: '✓' };
@@ -2005,7 +1071,6 @@ export default function SlugPage() {
           {slug === 'orders' ? 'Orders Management' : (slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : 'Item')}
         </h1>
         <Button
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
           onClick={() => setAddOpen(true)}
           disabled={isAdding}
         >
@@ -2037,6 +1102,8 @@ export default function SlugPage() {
         <>
           {slug === 'orders' ? (
             <OrderTable
+              orders={apiResponse as any[]}
+              loading={loading}
               onEdit={(order) => {
                 // Convert order to the format expected by the existing edit functionality
                 const orderIndex = apiResponse.findIndex(item => item._id === order._id);
@@ -2057,8 +1124,12 @@ export default function SlugPage() {
                 }
               }}
               onStatusChange={(orderId, status, field) => {
-                // This will be handled by the OrderTable component itself
-                console.log('Status changed:', orderId, status, field);
+                // Update local state when status changes
+                setApiResponse(prev => prev.map(item => 
+                  item._id === orderId 
+                    ? { ...item, [field]: status }
+                    : item
+                ));
               }}
             />
           ) : (
@@ -2135,7 +1206,6 @@ export default function SlugPage() {
                         <div className="flex gap-2">
                           <Button
                             onClick={() => setViewIdx(idx)}
-                            className="bg-blue-500 text-white text-xs flex items-center gap-1"
                             title="View details"
                             size="icon"
                           >
@@ -2143,7 +1213,6 @@ export default function SlugPage() {
                           </Button>
                           <Button
                             onClick={() => setEditIdx(idx)}
-                            className="bg-yellow-400 text-xs flex items-center gap-1"
                             title="Edit"
                             size="icon"
                             disabled={isEditing}
@@ -2167,7 +1236,6 @@ export default function SlugPage() {
                                   handleStatusFieldUpdate(idx, statusField, nextStatus);
                                 }
                               }}
-                              className="bg-green-500 text-white text-xs flex items-center gap-1"
                               title="Quick Status Change"
                               size="icon"
                               disabled={isUpdatingStatus === idx}
@@ -2183,9 +1251,9 @@ export default function SlugPage() {
                           )}
                           <Button
                             onClick={() => setDeleteIdx(idx)}
-                            className="bg-red-500 text-white text-xs flex items-center gap-1"
                             title="Delete"
                             size="icon"
+                            variant="destructive"
                             disabled={isDeleting === idx}
                           >
                             {isDeleting === idx ? (
@@ -2241,20 +1309,20 @@ export default function SlugPage() {
       <Modal open={deleteIdx !== null} onClose={() => setDeleteIdx(null)}>
         <h2 className="text-lg font-semibold mb-2">Are you sure you want to delete?</h2>
         <div className="flex gap-2 mt-4">
-          <Button 
-            onClick={() => handleDelete(deleteIdx as number)} 
-            className="bg-red-500 text-white"
-            disabled={isDeleting === deleteIdx}
-          >
-            {isDeleting === deleteIdx ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Deleting...
-              </div>
-            ) : (
-              'Yes, Delete'
-            )}
-          </Button>
+                  <Button 
+          onClick={() => handleDelete(deleteIdx as number)} 
+          variant="destructive"
+          disabled={isDeleting === deleteIdx}
+        >
+          {isDeleting === deleteIdx ? (
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              Deleting...
+            </div>
+          ) : (
+            'Yes, Delete'
+          )}
+        </Button>
           <Button 
             variant="outline" 
             onClick={() => setDeleteIdx(null)}
@@ -2310,7 +1378,7 @@ export default function SlugPage() {
                           <option value="">Select Status</option>
                           <option value="pending">Pending</option>
                           <option value="in-progress">In Progress</option>
-                          <option value="completed">Completed</option>
+                          <option value="Paid">Paid</option>
                           <option value="cancelled">Cancelled</option>
                           <option value="active">Active</option>
                           <option value="inactive">Inactive</option>
@@ -2340,7 +1408,6 @@ export default function SlugPage() {
               <div className="flex justify-end gap-2">
                 <Button
                   onClick={() => handleDownloadReceipt(invoicePreview.customerId)}
-                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
                 >
                   Download Receipt
                 </Button>

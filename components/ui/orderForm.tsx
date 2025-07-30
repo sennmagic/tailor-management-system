@@ -26,7 +26,7 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
   // Customer Information
   const [customerData, setCustomerData] = useState({
     name: '',
-    contactNum: '977000000000',
+    contactNum: '',
     email: '',
     address: '',
     dob: '',
@@ -596,8 +596,8 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
       </div>
 
       {/* Personal Information Section */}
-      <div className="bg-blue-50 rounded-lg p-4 sm:p-6 border border-blue-200">
-        <h3 className="text-base sm:text-lg font-semibold text-blue-900 mb-3 sm:mb-4 flex items-center">
+      <div className="bg-primary/5 rounded-lg p-4 sm:p-6 border border-primary/20">
+        <h3 className="text-base sm:text-lg font-semibold text-primary mb-3 sm:mb-4 flex items-center">
           <User className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
           Personal Information
         </h3>
@@ -647,8 +647,8 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
       </div>
 
       {/* Additional Details Section */}
-      <div className="bg-gray-50 rounded-lg p-4 sm:p-6 border border-gray-200">
-        <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center">
+      <div className="bg-muted rounded-lg p-4 sm:p-6 border border-border">
+        <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4 flex items-center">
           <CalendarIcon className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
           Additional Details
         </h3>
@@ -722,8 +722,8 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
       </div>
 
       {/* Address Section */}
-      <div className="bg-green-50 rounded-lg p-4 sm:p-6 border border-green-200">
-        <h3 className="text-base sm:text-lg font-semibold text-green-900 mb-3 sm:mb-4 flex items-center">
+      <div className="bg-primary/5 rounded-lg p-4 sm:p-6 border border-primary/20">
+        <h3 className="text-base sm:text-lg font-semibold text-primary mb-3 sm:mb-4 flex items-center">
           <MapPin className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
           Address
         </h3>
@@ -742,16 +742,16 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
       </div>
 
       {/* Validation Summary */}
-      <div className="bg-yellow-50 rounded-lg p-3 sm:p-4 border border-yellow-200">
+      <div className="bg-accent rounded-lg p-3 sm:p-4 border border-border">
         <div className="flex items-start">
           <div className="flex-shrink-0">
-            <svg className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+            <svg className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
           </div>
           <div className="ml-3">
-            <h3 className="text-sm font-medium text-yellow-800">Required Fields</h3>
-            <div className="mt-2 text-sm text-yellow-700">
+            <h3 className="text-sm font-medium text-foreground">Required Fields</h3>
+            <div className="mt-2 text-sm text-muted-foreground">
               <p>Please ensure all fields marked with <span className="text-red-500 font-bold">*</span> are completed before proceeding.</p>
             </div>
           </div>
@@ -1467,10 +1467,10 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
   );
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-1">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-[95vw] sm:max-w-[98vw] max-h-[95vh] sm:max-h-[99vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl mx-auto max-h-[95vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="bg-blue-600 text-white p-6">
+        <div className="bg-primary text-primary-foreground p-6">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold">
@@ -1496,20 +1496,20 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
         </div>
 
         {/* Tab Navigation */}
-        <div className="bg-gray-50 px-4 sm:px-6 py-3 sm:py-4 border-b">
+        <div className="bg-muted px-4 sm:px-6 py-3 sm:py-4 border-b">
           <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
             <button
               onClick={() => setActiveTab('customer')}
               className={cn(
                 "flex items-center gap-2 sm:gap-3 px-3 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 min-w-fit",
                 activeTab === 'customer'
-                  ? "bg-blue-600 text-white shadow-md"
+                  ? "bg-primary text-primary-foreground shadow-md"
                   : "text-gray-600 hover:text-gray-800 hover:bg-gray-100"
               )}
             >
               <div className={cn(
                 "w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-xs font-bold",
-                activeTab === 'customer' ? "bg-white text-blue-600" : "bg-gray-300 text-gray-600"
+                activeTab === 'customer' ? "bg-white text-primary" : "bg-gray-300 text-gray-600"
               )}>
                 1
               </div>
@@ -1524,13 +1524,13 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
               className={cn(
                 "flex items-center gap-2 sm:gap-3 px-3 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 min-w-fit",
                 activeTab === 'measurement'
-                  ? "bg-blue-600 text-white shadow-md"
+                  ? "bg-primary text-primary-foreground shadow-md"
                   : "text-gray-600 hover:text-gray-800 hover:bg-gray-100"
               )}
             >
               <div className={cn(
                 "w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-xs font-bold",
-                activeTab === 'measurement' ? "bg-white text-blue-600" : "bg-gray-300 text-gray-600"
+                activeTab === 'measurement' ? "bg-white text-primary" : "bg-gray-300 text-gray-600"
               )}>
                 2
               </div>
@@ -1545,13 +1545,13 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
               className={cn(
                 "flex items-center gap-2 sm:gap-3 px-3 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 min-w-fit",
                 activeTab === 'order'
-                  ? "bg-blue-600 text-white shadow-md"
+                  ? "bg-primary text-primary-foreground shadow-md"
                   : "text-gray-600 hover:text-gray-800 hover:bg-gray-100"
               )}
             >
               <div className={cn(
                 "w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-xs font-bold",
-                activeTab === 'order' ? "bg-white text-blue-600" : "bg-gray-300 text-gray-600"
+                activeTab === 'order' ? "bg-white text-primary" : "bg-gray-300 text-gray-600"
               )}>
                 3
               </div>
@@ -1562,7 +1562,7 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-gray-50 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
+        <div className="flex-1 overflow-y-auto bg-muted scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
           <div className="w-full p-3 sm:p-6">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 min-h-[500px] sm:min-h-[600px]">
               <div className="p-4 sm:p-6">
@@ -1575,7 +1575,7 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
         </div>
 
         {/* Footer Actions */}
-        <div className="bg-gray-50 px-6 py-4 border-t">
+        <div className="bg-muted px-6 py-4 border-t">
           <div className="flex justify-between items-center">
             <Button
               variant="outline"
@@ -1592,12 +1592,11 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
             
             <div className="flex gap-3">
               {activeTab === 'customer' && (
-                <Button
-                  type="button"
-                  onClick={handleSaveCustomer}
-                  disabled={!customerData.name || !customerData.contactNum || !customerData.dob || loading}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors"
-                >
+                                  <Button
+                    type="button"
+                    onClick={handleSaveCustomer}
+                    disabled={!customerData.name || !customerData.contactNum || !customerData.dob || loading}
+                  >
                   {loading ? (
                     <div className="flex items-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -1612,12 +1611,11 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
                 </Button>
               )}
               {activeTab === 'measurement' && (
-                <Button
-                  type="button"
-                  onClick={handleSaveMeasurement}
-                  disabled={!measurementData.measurementType || loading}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors"
-                >
+                                  <Button
+                    type="button"
+                    onClick={handleSaveMeasurement}
+                    disabled={!measurementData.measurementType || loading}
+                  >
                   {loading ? (
                     <div className="flex items-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -1641,7 +1639,6 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
                   <Button 
                     type="submit" 
                     disabled={loading}
-                    className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors"
                   >
                     {loading ? (
                       <div className="flex items-center gap-2">

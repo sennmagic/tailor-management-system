@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { fetchAPI } from "@/lib/apiService";
 import { useAlert } from "@/components/ui/alertProvider";
 import { Button } from "@/components/ui/button";
@@ -60,58 +60,29 @@ interface Order {
 }
 
 interface OrderTableProps {
+  orders: Order[];
+  loading?: boolean;
   onEdit?: (order: Order) => void;
   onView?: (order: Order) => void;
   onDelete?: (orderId: string) => void;
   onStatusChange?: (orderId: string, status: string, field: string) => void;
 }
 
-export function OrderTable({ onEdit, onView, onDelete, onStatusChange }: OrderTableProps) {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+export const OrderTable = React.memo(function OrderTable({ 
+  orders, 
+  loading = false,
+  onEdit, 
+  onView, 
+  onDelete, 
+  onStatusChange 
+}: OrderTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const { showAlert } = useAlert();
 
-  // Fetch orders
-  useEffect(() => {
-    const fetchOrders = async () => {
-      const { data, error } = await fetchAPI({
-        endpoint: 'orders',
-        method: 'GET',
-        withAuth: true,
-      });
-
-      if (error) {
-        showAlert(`Failed to fetch orders: ${error}`, "destructive");
-      } else {
-        let ordersArray = [];
-        
-        if (Array.isArray(data)) {
-          ordersArray = data;
-        } else if (data?.data && Array.isArray(data.data)) {
-          ordersArray = data.data;
-        } else if (data?.orderInfo && Array.isArray(data.orderInfo)) {
-          ordersArray = data.orderInfo;
-        } else if (data && typeof data === 'object') {
-          Object.keys(data).forEach(key => {
-            if (Array.isArray(data[key])) {
-              ordersArray = data[key];
-            }
-          });
-        }
-        
-        setOrders(ordersArray);
-      }
-      setLoading(false);
-    };
-
-    fetchOrders();
-  }, [showAlert]);
-
-  // Helper function to get customer name
+  // Helper function to get customer name - memoized
   const getCustomerName = useCallback((order: Order) => {
     if (order.customerId && typeof order.customerId === 'object' && order.customerId.name) {
       return order.customerId.name;
@@ -119,7 +90,7 @@ export function OrderTable({ onEdit, onView, onDelete, onStatusChange }: OrderTa
     return order.customerName || 'Unknown Customer';
   }, []);
 
-  // Helper function to get customer ID
+  // Helper function to get customer ID - memoized
   const getCustomerId = useCallback((order: Order) => {
     if (order.customerId && typeof order.customerId === 'object' && order.customerId._id) {
       return order.customerId._id;
@@ -129,7 +100,9 @@ export function OrderTable({ onEdit, onView, onDelete, onStatusChange }: OrderTa
 
   // Memoized filtered orders for better performance
   const filteredOrders = useMemo(() => {
-    const filtered = orders.filter(order => {
+    if (!orders || orders.length === 0) return [];
+    
+    return orders.filter(order => {
       const customerName = getCustomerName(order);
 
       const matchesSearch = 
@@ -145,12 +118,8 @@ export function OrderTable({ onEdit, onView, onDelete, onStatusChange }: OrderTa
       const matchesPaymentFilter = paymentFilter === "all" || 
         order.paymentStatus?.toLowerCase() === paymentFilter.toLowerCase();
 
-      const matches = matchesSearch && matchesStatusFilter && matchesPaymentFilter;
-
-      return matches;
+      return matchesSearch && matchesStatusFilter && matchesPaymentFilter;
     });
-
-    return filtered;
   }, [orders, searchTerm, statusFilter, paymentFilter, getCustomerName]);
 
   // Memoized status badge function
@@ -270,6 +239,11 @@ export function OrderTable({ onEdit, onView, onDelete, onStatusChange }: OrderTa
       return;
     }
 
+    // Prevent rapid updates
+    if (updatingStatus === orderId) {
+      return;
+    }
+
     setUpdatingStatus(orderId);
     
     // Add a small delay to prevent rapid API calls
@@ -285,17 +259,12 @@ export function OrderTable({ onEdit, onView, onDelete, onStatusChange }: OrderTa
     if (error) {
       showAlert(`Failed to update status: ${error}`, "destructive");
     } else {
-      setOrders(prev => prev.map(order => 
-        order._id === orderId 
-          ? { ...order, [field]: newStatus }
-          : order
-      ));
       showAlert('Status updated successfully!', "success");
       onStatusChange?.(orderId, newStatus, field);
     }
     
     setUpdatingStatus(null);
-  }, [showAlert, onStatusChange]);
+  }, [showAlert, onStatusChange, updatingStatus]);
 
   // Memoized utility functions
   const formatDate = useCallback((dateString?: string) => {
@@ -551,4 +520,4 @@ export function OrderTable({ onEdit, onView, onDelete, onStatusChange }: OrderTa
       )}
     </div>
   );
-} 
+}); 
