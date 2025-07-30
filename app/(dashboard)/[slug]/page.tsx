@@ -13,6 +13,7 @@ import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbS
 import { DynamicForm } from "@/components/Forms/DynamicFom";
 import { OrderForm } from "@/components/ui/orderForm";
 import { OrderTable } from "@/components/ui/orderTable";
+import { useLookup } from "@/lib/hooks/useLookup";
 
 import Link from "next/link";
 
@@ -35,27 +36,6 @@ function Modal({ open, onClose, children }: { open: boolean; onClose: () => void
 }
 
 
-function extractDataArray(data: unknown): Array<Record<string, unknown>> {
-  if (Array.isArray(data)) {
-    if (data.length > 0 && typeof data[0] === "object") return data as Array<Record<string, unknown>>;
-    if (data.length > 0 && typeof data[0] !== "object") {
-      return (data as unknown[]).map((item) => ({ value: item }));
-    }
-    return [];
-  }
-  if (data && typeof data === "object") {
-    for (const [key, value] of Object.entries(data)) {
-      if (Array.isArray(value) && value.length > 0 && typeof value[0] === "object") {
-        return value as Array<Record<string, unknown>>;
-      }
-      if (Array.isArray(value) && value.length > 0 && typeof value[0] !== "object") {
-        return value.map((item) => ({ value: item }));
-      }
-    }
-  }
-  return [];
-}
-
 const SKIP_FIELDS = ["updatedAt", "createdAt", "__v", "_id", "isDeleted"];
 
 function ViewDetailsModal({ 
@@ -69,25 +49,30 @@ function ViewDetailsModal({
 }) {
   if (!open || !data) return null;
 
-  // Helper function to format field names
-  function formatFieldName(key: string): string {
-    return key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
-  }
+  // Use the lookup hook for formatting functions
+  const { 
+    formatFieldName, 
+    formatStatusValue, 
+    formatValue,
+    shouldDisplayField, 
+    isStatusField, 
+    isDateField 
+  } = useLookup();
 
-  // Helper function to format values
-  function formatValue(value: unknown): string {
-    if (value == null || value === undefined) return "Not specified";
-    if (typeof value === "boolean") return value ? "Yes" : "No";
-    if (typeof value === "string" && value.trim() === "") return "Not specified";
-    if (typeof value === "object" && value !== null) {
-      if (Array.isArray(value)) {
-        return value.length === 0 ? "No items" : `${value.length} item(s)`;
-      }
-      if (Object.keys(value).length === 0) return "No data";
-      return "Object data";
-    }
-    return String(value);
-  }
+  // Helper function to format values - REMOVED: using formatValue from useLookup hook instead
+  // function formatValue(value: unknown): string {
+  //   if (value == null || value === undefined) return "Not specified";
+  //   if (typeof value === "boolean") return value ? "Yes" : "No";
+  //   if (typeof value === "string" && value.trim() === "") return "Not specified";
+  //   if (typeof value === "object" && value !== null) {
+  //     if (Array.isArray(value)) {
+  //       return value.length === 0 ? "No items" : `${value.length} item(s)`;
+  //     }
+  //     if (Object.keys(value).length === 0) return "No data";
+  //     return "Object data";
+  //   }
+  //   return String(value);
+  // }
 
   // Helper function to render nested object data in a user-friendly way
   function renderNestedData(data: any, title: string): React.ReactNode {
@@ -202,136 +187,9 @@ function ViewDetailsModal({
     );
   }
 
-  // Helper function to check if value should be displayed
-  function shouldDisplayField(key: string, value: unknown): boolean {
-    const skipFields = ["_id", "__v", "createdAt", "updatedAt", "isDeleted"];
-    if (skipFields.includes(key)) return false;
-    if (value === null || value === undefined) return false;
-    if (typeof value === "string" && value.trim() === "") return false;
-    return true;
-  }
 
-  // Helper function to check if field is a date field
-  function isDateField(fieldName: string): boolean {
-    const lower = fieldName.toLowerCase();
-    return lower === 'dob' || lower === 'date' || lower.includes('date') || lower.includes('time');
-  }
 
-  // Helper function to check if field is a status field
-  function isStatusField(fieldName: string): boolean {
-    const lower = fieldName.toLowerCase();
-    // Check for exact matches
-    if (lower === 'status') return true;
-    
-    // Check for compound words containing 'status' (like PaymentStatus, OrderStatus, etc.)
-    if (lower.includes('status')) return true;
-    
-    // Check for payment-related fields
-    if (lower.includes('payment')) return true;
-    
-    // Check for state-related fields
-    if (lower.includes('state')) return true;
-    
-    // Check for common status-like fields
-    const statusKeywords = ['condition', 'phase', 'stage', 'mode', 'type'];
-    return statusKeywords.some(keyword => lower.includes(keyword));
-  }
 
-  // Helper function to get status badge styling
-  function getStatusBadgeStyle(status: string): { bg: string; text: string; border: string; icon?: string } {
-    const lowerStatus = status.toLowerCase();
-    
-    // Order statuses
-    if (lowerStatus === 'pending') {
-      return { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', icon: '⏳' };
-    }
-    if (lowerStatus === 'cutting') {
-      return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: '⟳' };
-    }
-    if (lowerStatus === 'sewing') {
-      return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: '⟳' };
-    }
-    if (lowerStatus === 'ready') {
-      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: '✓' };
-    }
-    if (lowerStatus === 'delivered') {
-      return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: '✓' };
-    }
-    if (lowerStatus === 'cancelled') {
-      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: '✗' };
-    }
-    
-    // Payment statuses
-    if (lowerStatus === 'paid') {
-      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: '✓' };
-    }
-    if (lowerStatus === 'unpaid') {
-      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: '✗' };
-    }
-    if (lowerStatus === 'partial') {
-      return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', icon: '⚠' };
-    }
-    
-    // Success/Positive statuses
-    if (lowerStatus.includes('Paid') || lowerStatus.includes('approved') || 
-        lowerStatus.includes('active') || lowerStatus.includes('success') || lowerStatus.includes('done') ||
-        lowerStatus.includes('finished') || lowerStatus.includes('confirmed')) {
-      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: '✓' };
-    }
-    
-    // Warning/Pending statuses
-    if (lowerStatus.includes('processing') || lowerStatus.includes('waiting') ||
-        lowerStatus.includes('on-hold') || lowerStatus.includes('scheduled') || lowerStatus.includes('draft')) {
-      return { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', icon: '⏳' };
-    }
-    
-    // Error/Failed statuses
-    if (lowerStatus.includes('failed') || lowerStatus.includes('rejected') || 
-        lowerStatus.includes('inactive') || lowerStatus.includes('error') || lowerStatus.includes('declined') ||
-        lowerStatus.includes('expired') || lowerStatus.includes('void')) {
-      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: '✗' };
-    }
-    
-    // Progress/Partial statuses
-    if (lowerStatus.includes('progress') || lowerStatus.includes('in-progress') ||
-        lowerStatus.includes('ongoing') || lowerStatus.includes('running') || lowerStatus.includes('working')) {
-      return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: '⟳' };
-    }
-    
-    // Info/Neutral statuses
-    if (lowerStatus.includes('info') || lowerStatus.includes('new') || lowerStatus.includes('created') ||
-        lowerStatus.includes('submitted') || lowerStatus.includes('received')) {
-      return { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', icon: 'ℹ' };
-    }
-    
-    // Default gray for unknown statuses
-    return { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', icon: '•' };
-  }
-
-  // Helper function to format status value with badge
-  function formatStatusValue(value: unknown): React.ReactNode {
-    if (value == null || value === undefined || value === '') return "Not specified";
-    
-    const statusStr = String(value);
-    const style = getStatusBadgeStyle(statusStr);
-    
-    // Format the status text nicely
-    const formattedText = statusStr
-      .replace(/([A-Z])/g, ' $1') // Add space before capital letters
-      .replace(/-/g, ' ') // Replace hyphens with spaces
-      .replace(/_/g, ' ') // Replace underscores with spaces
-      .trim()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
-    
-    return (
-      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium border ${style.bg} ${style.text} ${style.border}`}>
-        {style.icon && <span className="text-sm">{style.icon}</span>}
-        <span>{formattedText}</span>
-      </span>
-    );
-  }
 
   // Group fields by category
   const statusFields: [string, unknown][] = [];
@@ -391,7 +249,15 @@ function ViewDetailsModal({
                     {formatFieldName(key)}
                   </div>
                   <div className="text-base">
-                    {formatStatusValue(value)}
+                    {(() => {
+                      const statusData = formatStatusValue(value);
+                      return (
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusData.style.bg} ${statusData.style.text} ${statusData.style.border}`}>
+                          {statusData.style.icon && <span>{statusData.style.icon}</span>}
+                          {statusData.text}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}
@@ -536,7 +402,39 @@ export default function SlugPage() {
   const [isDownloading, setIsDownloading] = useState<number | null>(null);
   const [invoicePreview, setInvoicePreview] = useState<{ url: string; customerId: string; statusData?: any } | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Use the unified lookup hook
+  const {
+    extractDataArray,
+    isStatusField,
+    isDateField,
+    getStatusOptions,
+    getStatusBadgeStyle,
+    formatFieldName,
+    formatStatusValue,
+    formatValue,
+    shouldDisplayField,
+    renderCellValue,
+    filterSubmitFields,
+    getConsistentFormTemplate,
+    getEmptyFormData
+  } = useLookup({ data: apiResponse });
   
+  const [testFormOpen, setTestFormOpen] = useState(false);
+  const [testFormData] = useState({
+    name: "Test Item",
+    status: "pending",
+    customerId: "123",
+    amount: 100,
+    isActive: true,
+    createdAt: "2024-01-01",
+    description: "This is a test item",
+    tags: ["test", "demo"],
+    metadata: {
+      category: "test",
+      priority: "high"
+    }
+  });
 
 
   useEffect(() => {
@@ -573,162 +471,29 @@ export default function SlugPage() {
     return keys;
   }, [apiResponse, slug]);
 
-  // Helper function to check if field is a status field
-  function isStatusField(fieldName: string): boolean {
-    const lower = fieldName.toLowerCase();
-    // Check for exact matches
-    if (lower === 'status') return true;
-    
-    // Check for compound words containing 'status' (like PaymentStatus, OrderStatus, etc.)
-    if (lower.includes('status')) return true;
-    
-    // Check for payment-related fields
-    if (lower.includes('payment')) return true;
-    
-    // Check for state-related fields
-    if (lower.includes('state')) return true;
-    
-    // Check for common status-like fields
-    const statusKeywords = ['condition', 'phase', 'stage', 'mode', 'type'];
-    return statusKeywords.some(keyword => lower.includes(keyword));
-  }
 
-  // Get dynamic status options based on field name
-  function getStatusOptions(fieldName: string): string[] {
-    const lower = fieldName.toLowerCase();
-    
-    // Common status options
-    const commonStatuses = [
-      'Paid', 'in-Unpaid', 'Paid', 'cancelled',
-      'active', 'inactive', 'approved', 'rejected'
-    ];
-    
-    // Field-specific status options
-    if (lower.includes('payment')) {
-      return ['pending', 'processing', 'Paid', 'failed', 'refunded', 'cancelled'];
-    }
-    
-    if (lower.includes('order')) {
-      return ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
-    }
-    
-    if (lower.includes('shipment') || lower.includes('delivery')) {
-      return ['pending', 'in-transit', 'out-for-delivery', 'delivered', 'failed', 'returned'];
-    }
-    
-    if (lower.includes('approval')) {
-      return ['pending', 'approved', 'rejected', 'under-review'];
-    }
-    
-    if (lower.includes('user') || lower.includes('account')) {
-      return ['active', 'inactive', 'suspended', 'pending-verification'];
-    }
-    
-    return commonStatuses;
-  }
 
-  // Helper function to get status badge styling
-  function getStatusBadgeStyle(status: string): { bg: string; text: string; border: string; icon?: string } {
-    const lowerStatus = status.toLowerCase();
-    
-    // Order statuses
-    if (lowerStatus === 'pending') {
-      return { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', icon: '⏳' };
-    }
-    if (lowerStatus === 'cutting') {
-      return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: '⟳' };
-    }
-    if (lowerStatus === 'sewing') {
-      return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: '⟳' };
-    }
-    if (lowerStatus === 'ready') {
-      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: '✓' };
-    }
-    if (lowerStatus === 'delivered') {
-      return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: '✓' };
-    }
-    if (lowerStatus === 'cancelled') {
-      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: '✗' };
-    }
-    
-    // Payment statuses
-    if (lowerStatus === 'paid') {
-      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: '✓' };
-    }
-    if (lowerStatus === 'unpaid') {
-      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: '✗' };
-    }
-    if (lowerStatus === 'partial') {
-      return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', icon: '⚠' };
-    }
-    
-    // Success/Positive statuses
-    if (lowerStatus.includes('Paid') || lowerStatus.includes('approved') || 
-        lowerStatus.includes('active') || lowerStatus.includes('success') || lowerStatus.includes('done') ||
-        lowerStatus.includes('finished') || lowerStatus.includes('confirmed')) {
-      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: '✓' };
-    }
-    
-    // Warning/Pending statuses
-    if (lowerStatus.includes('processing') || lowerStatus.includes('waiting') ||
-        lowerStatus.includes('on-hold') || lowerStatus.includes('scheduled') || lowerStatus.includes('draft')) {
-      return { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', icon: '⏳' };
-    }
-    
-    // Error/Failed statuses
-    if (lowerStatus.includes('failed') || lowerStatus.includes('rejected') || 
-        lowerStatus.includes('inactive') || lowerStatus.includes('error') || lowerStatus.includes('declined') ||
-        lowerStatus.includes('expired') || lowerStatus.includes('void')) {
-      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: '✗' };
-    }
-    
-    // Progress/Partial statuses
-    if (lowerStatus.includes('progress') || lowerStatus.includes('in-progress') ||
-        lowerStatus.includes('ongoing') || lowerStatus.includes('running') || lowerStatus.includes('working')) {
-      return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: '⟳' };
-    }
-    
-    // Info/Neutral statuses
-    if (lowerStatus.includes('info') || lowerStatus.includes('new') || lowerStatus.includes('created') ||
-        lowerStatus.includes('submitted') || lowerStatus.includes('received')) {
-      return { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', icon: 'ℹ' };
-    }
-    
-    // Default gray for unknown statuses
-    return { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', icon: '•' };
-  }
 
-  // Helper function to format status value with badge
-  function formatStatusValue(value: unknown): React.ReactNode {
-    if (value == null || value === undefined || value === '') return "Not specified";
-    
-    const statusStr = String(value);
-    const style = getStatusBadgeStyle(statusStr);
-    
-    // Format the status text nicely
-    const formattedText = statusStr
-      .replace(/([A-Z])/g, ' $1') // Add space before capital letters
-      .replace(/-/g, ' ') // Replace hyphens with spaces
-      .replace(/_/g, ' ') // Replace underscores with spaces
-      .trim()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
-    
-    return (
-      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium border ${style.bg} ${style.text} ${style.border}`}>
-        {style.icon && <span className="text-sm">{style.icon}</span>}
-        <span>{formattedText}</span>
-      </span>
-    );
-  }
 
-  function renderCellValue(value: unknown, fieldName?: string) {
+
+
+
+
+  // Helper function to render cell value with JSX (using hook's renderCellValue as base)
+  function renderCellValueWithJSX(value: unknown, fieldName?: string) {
+    const cellText = renderCellValue(value, fieldName);
+    
     if (value == null) return <span className="text-gray-400">-</span>;
     
     // If this is a status field, render it with a badge
     if (fieldName && isStatusField(fieldName)) {
-      return formatStatusValue(value);
+      const statusData = formatStatusValue(value);
+      return (
+        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusData.style.bg} ${statusData.style.text} ${statusData.style.border}`}>
+          {statusData.style.icon && <span>{statusData.style.icon}</span>}
+          {statusData.text}
+        </span>
+      );
     }
     
     if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -740,308 +505,234 @@ export default function SlugPage() {
     return <span className="text-gray-400">-</span>;
   }
 
-  function filterSubmitFields(values: Record<string, unknown>) {
-    const filtered: Record<string, unknown> = {};
-    Object.entries(values).forEach(([k, v]) => {
-      if (!SKIP_FIELDS.includes(k)) filtered[k] = v;
-    });
-    return filtered;
-  }
-
-  async function handleEditSave(values: Record<string, unknown>) {
-    setIsEditing(true);
-    const itemToEdit = apiResponse[editIdx!];
-    const id = itemToEdit._id as string;
+  // Unified API handler for all CRUD operations
+  async function handleApiOperation(
+    operation: 'create' | 'update' | 'delete' | 'status-update' | 'field-update' | 'preview-invoice' | 'download-receipt' | 'preview-status-update',
+    data?: Record<string, unknown>,
+    options?: {
+      idx?: number;
+      fieldName?: string;
+      newValue?: string;
+      customerId?: string;
+      statusKey?: string;
+    }
+  ) {
     const endpointSlug = typeof slug === 'string' ? slug : '';
-    const filteredValues = filterSubmitFields(values);
     
-    const { error } = await fetchAPI({
-      endpoint: `${endpointSlug}/${id}`,
-      method: "PUT",
-      data: filteredValues,
-      withAuth: true,
-    });
-    
-    if (error) {
-      showAlert("Failed to update: " + error, "destructive");
-    } else {
-      fetchAPI({ endpoint: endpointSlug, method: "GET" }).then(({ data }) => {
-        setApiResponse(extractDataArray(data));
+    try {
+      let response;
+      let endpoint = '';
+      let method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET';
+      let requestData: Record<string, unknown> | undefined;
+
+      switch (operation) {
+        case 'create':
+          method = 'POST';
+          endpoint = endpointSlug;
+          requestData = filterSubmitFields(data!);
+          setIsAdding(true);
+          break;
+
+        case 'update':
+          method = 'PUT';
+          const itemToEdit = apiResponse[options?.idx!];
+          const editId = itemToEdit?._id as string;
+          endpoint = `${endpointSlug}/${editId}`;
+          requestData = filterSubmitFields(data!);
+          setIsEditing(true);
+          break;
+
+        case 'delete':
+          method = 'DELETE';
+          const itemToDelete = apiResponse[options?.idx!];
+          const deleteId = itemToDelete?._id as string;
+          endpoint = `${endpointSlug}/${deleteId}`;
+          setIsDeleting(options?.idx!);
+          break;
+
+        case 'status-update':
+          method = 'PUT';
+          const itemToUpdate = apiResponse[options?.idx!];
+          const statusId = itemToUpdate?._id as string;
+          endpoint = `${endpointSlug}/${statusId}`;
+          requestData = { status: options?.newValue };
+          setIsUpdatingStatus(options?.idx!);
+          break;
+
+        case 'field-update':
+          method = 'PUT';
+          const fieldItem = apiResponse[options?.idx!];
+          const fieldId = fieldItem?._id as string;
+          endpoint = `${endpointSlug}/${fieldId}`;
+          requestData = { [options?.fieldName!]: options?.newValue };
+          setIsUpdatingStatus(options?.idx!);
+          break;
+
+        case 'preview-invoice':
+          method = 'GET';
+          endpoint = `invoice/${options?.customerId}`;
+          setIsDownloading(options?.idx!);
+          break;
+
+        case 'download-receipt':
+          method = 'GET';
+          endpoint = `invoice/${options?.customerId}/download`;
+          break;
+
+        case 'preview-status-update':
+          method = 'PUT';
+          endpoint = `orders/${options?.customerId}`;
+          requestData = { [options?.statusKey!]: options?.newValue };
+          break;
+      }
+
+      const { data: responseData, error } = await fetchAPI({
+        endpoint,
+        method,
+        data: requestData,
+        withAuth: true,
       });
-      setEditIdx(null);
-      showAlert("Update successful!", "success");
-    }
-    
-    setIsEditing(false);
-  }
 
-  async function handleDelete(idx: number) {
-    setIsDeleting(idx);
-    const itemToDelete = apiResponse[idx];
-    const id = itemToDelete._id as string;
-    const endpointSlug = typeof slug === 'string' ? slug : '';
-    
-    const { error } = await fetchAPI({
-      endpoint: `${endpointSlug}/${id}`,
-      method: "DELETE",
-      withAuth: true,
-    });
-    
-    if (error) {
-      showAlert("Failed to delete: " + error, "destructive");
-    } else {
-      // Update local state only after successful server deletion
-      setApiResponse((prev) => prev.filter((_, i) => i !== idx));
-      setDeleteIdx(null);
-      showAlert("Deleted successfully!", "success");
-    }
-    
-    setIsDeleting(null);
-  }
+      if (error) {
+        const errorMessages = {
+          'create': 'Failed to create',
+          'update': 'Failed to update',
+          'delete': 'Failed to delete',
+          'status-update': 'Failed to update status',
+          'field-update': `Failed to update ${options?.fieldName || 'field'}`,
+          'preview-invoice': 'Failed to load invoice preview',
+          'download-receipt': 'Failed to download receipt',
+          'preview-status-update': 'Failed to update status'
+        };
+        showAlert(`${errorMessages[operation]}: ${error}`, "destructive");
+        return { success: false, data: null, error };
+      }
 
-  async function handleStatusUpdate(idx: number, newStatus: string) {
-    setIsUpdatingStatus(idx);
-    const itemToUpdate = apiResponse[idx];
-    const id = itemToUpdate._id as string;
-    const endpointSlug = typeof slug === 'string' ? slug : '';
-    
-    const { error } = await fetchAPI({
-      endpoint: `${endpointSlug}/${id}`,
-      method: "PUT",
-      data: { status: newStatus },
-      withAuth: true,
-    });
-    
-    if (error) {
-      showAlert("Failed to update status: " + error, "destructive");
-    } else {
-      // Update local state
-      setApiResponse((prev) => 
-        prev.map((item, i) => 
-          i === idx ? { ...item, status: newStatus } : item
-        )
-      );
-      showAlert("Status updated successfully!", "success");
-    }
-    
-    setIsUpdatingStatus(null);
-  }
+      // Handle successful responses
+      switch (operation) {
+        case 'create':
+          // Refresh data after creation
+          const { data: refreshData } = await fetchAPI({ endpoint: endpointSlug, method: "GET" });
+          setApiResponse(extractDataArray(refreshData));
+          setAddOpen(false);
+          showAlert("Created successfully!", "success");
+          break;
 
-  async function handleStatusFieldUpdate(idx: number, fieldName: string, newValue: string) {
-    // Prevent rapid updates
-    if (isUpdatingStatus === idx) return;
-    
-    setIsUpdatingStatus(idx);
-    const itemToUpdate = apiResponse[idx];
-    const id = itemToUpdate._id as string;
-    const endpointSlug = typeof slug === 'string' ? slug : '';
-    
-    // Add small delay to prevent lag
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
-    const { error } = await fetchAPI({
-      endpoint: `${endpointSlug}/${id}`,
-      method: "PUT",
-      data: { [fieldName]: newValue },
-      withAuth: true,
-    });
-    
-    if (error) {
-      showAlert(`Failed to update ${fieldName}: ` + error, "destructive");
-    } else {
-      // Update local state
-      setApiResponse((prev) => 
-        prev.map((item, i) => 
-          i === idx ? { ...item, [fieldName]: newValue } : item
-        )
-      );
-      showAlert(`${fieldName.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())} updated successfully!`, "success");
-    }
-    
-    setIsUpdatingStatus(null);
-  }
+        case 'update':
+          // Refresh data after update
+          const { data: updateRefreshData } = await fetchAPI({ endpoint: endpointSlug, method: "GET" });
+          setApiResponse(extractDataArray(updateRefreshData));
+          setEditIdx(null);
+          showAlert("Update successful!", "success");
+          break;
 
-  async function handlePreviewInvoice(idx: number) {
-    setIsDownloading(idx);
-    const itemToDownload = apiResponse[idx];
-    const customerId = itemToDownload.customerId as string;
-    
-    if (!customerId) {
-      showAlert("No customer ID found for this order", "destructive");
+        case 'delete':
+          // Update local state after successful deletion
+          setApiResponse((prev) => prev.filter((_, i) => i !== options?.idx!));
+          setDeleteIdx(null);
+          showAlert("Deleted successfully!", "success");
+          break;
+
+        case 'status-update':
+        case 'field-update':
+          // Update local state
+          setApiResponse((prev) => 
+            prev.map((item, i) => 
+              i === options?.idx! 
+                ? { ...item, [options?.fieldName || 'status']: options?.newValue }
+                : item
+            )
+          );
+          showAlert(operation === 'status-update' 
+            ? "Status updated successfully!" 
+            : `${options?.fieldName?.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()) || 'Field'} updated successfully!`, 
+            "success"
+          );
+          break;
+
+        case 'preview-invoice':
+          if (responseData && responseData.previewUrl) {
+            // Find status fields in the order data
+            const statusFields: Record<string, any> = {};
+            const itemToDownload = apiResponse[options?.idx!];
+            Object.entries(itemToDownload || {}).forEach(([key, value]) => {
+              if (key.toLowerCase().includes('status')) {
+                statusFields[key] = value;
+              }
+            });
+            
+            setInvoicePreview({ 
+              url: responseData.previewUrl, 
+              customerId: options?.customerId!,
+              statusData: statusFields
+            });
+          } else {
+            showAlert("No preview URL received from server", "destructive");
+          }
+          break;
+
+        case 'download-receipt':
+          if (responseData && responseData.downloadUrl) {
+            // Create a temporary link to download the file
+            const link = document.createElement('a');
+            link.href = responseData.downloadUrl;
+            link.download = `receipt-${options?.customerId}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showAlert("Receipt downloaded successfully!", "success");
+            setInvoicePreview(null);
+          } else {
+            showAlert("No download URL received from server", "destructive");
+          }
+          break;
+
+        case 'preview-status-update':
+          // Update local state
+          setApiResponse((prev) => 
+            prev.map((item) => 
+              item.customerId === options?.customerId 
+                ? { ...item, [options?.statusKey!]: options?.newValue }
+                : item
+            )
+          );
+          
+          // Update preview state
+          setInvoicePreview(prev => prev ? {
+            ...prev,
+            statusData: {
+              ...prev.statusData,
+              [options?.statusKey!]: options?.newValue
+            }
+          } : null);
+          
+          showAlert("Status updated successfully!", "success");
+          break;
+      }
+
+      return { success: true, data: responseData, error: null };
+
+    } catch (err) {
+      const errorMessages = {
+        'create': 'Failed to create',
+        'update': 'Failed to update',
+        'delete': 'Failed to delete',
+        'status-update': 'Failed to update status',
+        'field-update': `Failed to update ${options?.fieldName || 'field'}`,
+        'preview-invoice': 'Failed to load invoice preview',
+        'download-receipt': 'Failed to download receipt',
+        'preview-status-update': 'Failed to update status'
+      };
+      showAlert(`${errorMessages[operation]}: ${err}`, "destructive");
+      return { success: false, data: null, error: err };
+    } finally {
+      // Reset loading states
+      setIsAdding(false);
+      setIsEditing(false);
+      setIsDeleting(null);
+      setIsUpdatingStatus(null);
       setIsDownloading(null);
-      return;
     }
-    
-    const { data, error } = await fetchAPI({
-      endpoint: `invoice/${customerId}`,
-      method: "GET",
-      withAuth: true,
-    });
-    
-    if (error) {
-      showAlert("Failed to load invoice preview: " + error, "destructive");
-    } else if (data && data.previewUrl) {
-      // Find status fields in the order data
-      const statusFields: Record<string, any> = {};
-      Object.entries(itemToDownload).forEach(([key, value]) => {
-        if (key.toLowerCase().includes('status')) {
-          statusFields[key] = value;
-        }
-      });
-      
-      setInvoicePreview({ 
-        url: data.previewUrl, 
-        customerId,
-        statusData: statusFields
-      });
-    } else {
-      showAlert("No preview URL received from server", "destructive");
-    }
-    
-    setIsDownloading(null);
-  }
-
-  async function handleDownloadReceipt(customerId: string) {
-    const { data, error } = await fetchAPI({
-      endpoint: `invoice/${customerId}/download`,
-      method: "GET",
-      withAuth: true,
-    });
-    
-    if (error) {
-      showAlert("Failed to download receipt: " + error, "destructive");
-    } else if (data && data.downloadUrl) {
-      // Create a temporary link to download the file
-      const link = document.createElement('a');
-      link.href = data.downloadUrl;
-      link.download = `receipt-${customerId}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showAlert("Receipt downloaded successfully!", "success");
-      setInvoicePreview(null);
-    } else {
-      showAlert("No download URL received from server", "destructive");
-    }
-  }
-
-  async function handleStatusChangeInPreview(statusKey: string, newValue: string) {
-    if (!invoicePreview) return;
-    
-    const { error } = await fetchAPI({
-      endpoint: `orders/${invoicePreview.customerId}`,
-      method: "PUT",
-      data: { [statusKey]: newValue },
-      withAuth: true,
-    });
-    
-    if (error) {
-      showAlert("Failed to update status: " + error, "destructive");
-    } else {
-      // Update local state
-      setApiResponse((prev) => 
-        prev.map((item) => 
-          item.customerId === invoicePreview.customerId 
-            ? { ...item, [statusKey]: newValue }
-            : item
-        )
-      );
-      
-      // Update preview state
-      setInvoicePreview(prev => prev ? {
-        ...prev,
-        statusData: {
-          ...prev.statusData,
-          [statusKey]: newValue
-        }
-      } : null);
-      
-      showAlert("Status updated successfully!", "success");
-    }
-  }
-
-  // Build a superset of all keys (recursively) from all items in apiResponse
-  function getConsistentFormTemplate() {
-    function mergeKeys(a: any, b: any): any {
-      if (Array.isArray(a) && Array.isArray(b)) return [];
-      if (typeof a === 'object' && a && typeof b === 'object' && b) {
-        const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-        const result: Record<string, any> = {};
-        keys.forEach((k) => {
-          if (!SKIP_FIELDS.includes(k)) {
-            result[k] = mergeKeys(a[k], b[k]);
-          }
-        });
-        return result;
-      }
-      return undefined;
-    }
-    if (!apiResponse.length) return {};
-    let superset = { ...apiResponse[0] };
-    for (let i = 1; i < apiResponse.length; i++) {
-      superset = mergeKeys(superset, apiResponse[i]);
-    }
-    return superset;
-  }
-
-  function getEmptyFormData() {
-    function makeEmptyTemplate(obj: any): any {
-      if (Array.isArray(obj)) {
-        // If array has a template item, use its structure for new items
-        if (obj.length > 0 && typeof obj[0] === 'object') {
-          // Optionally, start with an empty array, but keep the template for rendering
-          return [];
-        }
-        return [];
-      }
-      if (obj === null || obj === undefined) return "";
-      if (typeof obj === "boolean") return false;
-      if (typeof obj === "number") return "";
-      if (typeof obj === "string") return "";
-      if (typeof obj === "object") {
-        const result: Record<string, any> = {};
-        Object.keys(obj).forEach((k) => {
-          if (!SKIP_FIELDS.includes(k)) {
-            result[k] = makeEmptyTemplate(obj[k]);
-          }
-        });
-        return result;
-      }
-      return "";
-    }
-    const template = getConsistentFormTemplate();
-    if (Object.keys(template).length > 0) {
-      return makeEmptyTemplate(template);
-    }
-    if (allKeys.length === 1 && allKeys[0] === "value") {
-      return { value: "" };
-    }
-    return {};
-  }
-
-  async function handleAddSave(values: Record<string, unknown>) {
-    setIsAdding(true);
-    const endpointSlug = typeof slug === 'string' ? slug : '';
-    const filteredValues = filterSubmitFields(values);
-    
-    const { error } = await fetchAPI({
-      endpoint: endpointSlug,
-      method: "POST",
-      data: filteredValues,
-      withAuth: true,
-    });
-    
-    if (error) {
-      showAlert("Failed to create: " + error, "destructive");
-    } else {
-      fetchAPI({ endpoint: endpointSlug, method: "GET" }).then(({ data }) => {
-        setApiResponse(extractDataArray(data));
-      });
-      setAddOpen(false);
-      showAlert("Created successfully!", "success");
-    }
-    
-    setIsAdding(false);
   }
 
   return (
@@ -1070,19 +761,31 @@ export default function SlugPage() {
         <h1 className="text-2xl font-bold">
           {slug === 'orders' ? 'Orders Management' : (slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : 'Item')}
         </h1>
-        <Button
-          onClick={() => setAddOpen(true)}
-          disabled={isAdding}
-        >
-          {isAdding ? (
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              Adding...
-            </div>
-          ) : (
-            slug === 'orders' ? '+ Create Order' : `+ Add ${slug ?? 'Item'}`
-          )}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => {
+              // Test DynamicFormWithHook
+              setTestFormOpen(true);
+            }}
+            variant="outline"
+            size="sm"
+          >
+            Test Form
+          </Button>
+          <Button
+            onClick={() => setAddOpen(true)}
+            disabled={isAdding}
+          >
+            {isAdding ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Adding...
+              </div>
+            ) : (
+              slug === 'orders' ? '+ Create Order' : `+ Add ${slug ?? 'Item'}`
+            )}
+          </Button>
+        </div>
       </div>
       
       {/* Show OrderForm when addOpen is true for orders */}
@@ -1120,16 +823,14 @@ export default function SlugPage() {
               onDelete={(orderId) => {
                 const orderIndex = apiResponse.findIndex(item => item._id === orderId);
                 if (orderIndex !== -1) {
-                  setDeleteIdx(orderIndex);
+                  handleApiOperation('delete', {}, { idx: orderIndex });
                 }
               }}
               onStatusChange={(orderId, status, field) => {
-                // Update local state when status changes
-                setApiResponse(prev => prev.map(item => 
-                  item._id === orderId 
-                    ? { ...item, [field]: status }
-                    : item
-                ));
+                const orderIndex = apiResponse.findIndex(item => item._id === orderId);
+                if (orderIndex !== -1) {
+                  handleApiOperation('field-update', {}, { idx: orderIndex, fieldName: field, newValue: status });
+                }
               }}
             />
           ) : (
@@ -1177,11 +878,19 @@ export default function SlugPage() {
                           {isStatusField(key) ? (
                             <div className="flex items-center gap-2">
                               <div className="flex-1">
-                                {formatStatusValue(row[key])}
+                                {(() => {
+                                  const statusData = formatStatusValue(row[key]);
+                                  return (
+                                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusData.style.bg} ${statusData.style.text} ${statusData.style.border}`}>
+                                      {statusData.style.icon && <span>{statusData.style.icon}</span>}
+                                      {statusData.text}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                               <select
                                 value={String(row[key] || '')}
-                                onChange={(e) => handleStatusFieldUpdate(idx, key, e.target.value)}
+                                                                 onChange={(e) => handleApiOperation('field-update', {}, { idx, fieldName: key, newValue: e.target.value })}
                                 disabled={isUpdatingStatus === idx}
                                 className="text-xs px-2 py-1 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 min-w-24"
                                 title={`Change ${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`}
@@ -1198,7 +907,7 @@ export default function SlugPage() {
                               )}
                             </div>
                           ) : (
-                            renderCellValue(row[key], key)
+                            renderCellValueWithJSX(row[key], key)
                           )}
                         </TableCell>
                       ))}
@@ -1233,7 +942,7 @@ export default function SlugPage() {
                                   const options = getStatusOptions(statusField);
                                   const currentIndex = options.indexOf(currentStatus);
                                   const nextStatus = options[(currentIndex + 1) % options.length];
-                                  handleStatusFieldUpdate(idx, statusField, nextStatus);
+                                                                     handleApiOperation('field-update', {}, { idx, fieldName: statusField, newValue: nextStatus });
                                 }
                               }}
                               title="Quick Status Change"
@@ -1298,9 +1007,9 @@ export default function SlugPage() {
           {editIdx !== null && (
             <DynamicForm
               data={apiResponse[editIdx]}
-              onSubmit={handleEditSave}
+                             onSubmit={(values) => handleApiOperation('update', values, { idx: editIdx! })}
               onCancel={() => setEditIdx(null)}
-              getConsistentFormTemplate={getConsistentFormTemplate}
+              getConsistentFormTemplate={() => getConsistentFormTemplate(apiResponse)}
               isLoading={isEditing}
             />
           )}
@@ -1310,7 +1019,7 @@ export default function SlugPage() {
         <h2 className="text-lg font-semibold mb-2">Are you sure you want to delete?</h2>
         <div className="flex gap-2 mt-4">
                   <Button 
-          onClick={() => handleDelete(deleteIdx as number)} 
+                         onClick={() => handleApiOperation('delete', undefined, { idx: deleteIdx as number })} 
           variant="destructive"
           disabled={isDeleting === deleteIdx}
         >
@@ -1337,10 +1046,10 @@ export default function SlugPage() {
         <Modal open={addOpen} onClose={() => setAddOpen(false)}>
           <h2 className="text-lg font-semibold mb-2">Add New {slug ?? 'Item'}</h2>
           <DynamicForm
-            data={getEmptyFormData()}
-            onSubmit={handleAddSave}
+            data={getEmptyFormData(apiResponse, allKeys)}
+                         onSubmit={(values) => handleApiOperation('create', values)}
             onCancel={() => setAddOpen(false)}
-            getConsistentFormTemplate={getConsistentFormTemplate}
+            getConsistentFormTemplate={() => getConsistentFormTemplate(apiResponse)}
             isLoading={isAdding}
           />
         </Modal>
@@ -1372,7 +1081,7 @@ export default function SlugPage() {
                         </label>
                         <select
                           value={String(statusValue || '')}
-                          onChange={(e) => handleStatusChangeInPreview(statusKey, e.target.value)}
+                                                     onChange={(e) => handleApiOperation('preview-status-update', undefined, { customerId: invoicePreview.customerId, statusKey, newValue: e.target.value })}
                           className="flex-1 text-sm px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                         >
                           <option value="">Select Status</option>
@@ -1407,7 +1116,7 @@ export default function SlugPage() {
               {/* Action Buttons */}
               <div className="flex justify-end gap-2">
                 <Button
-                  onClick={() => handleDownloadReceipt(invoicePreview.customerId)}
+                                     onClick={() => handleApiOperation('download-receipt', undefined, { customerId: invoicePreview.customerId })}
                 >
                   Download Receipt
                 </Button>
@@ -1421,6 +1130,32 @@ export default function SlugPage() {
             </>
           )}
         </div>
+      </Modal>
+      <Modal open={testFormOpen} onClose={() => setTestFormOpen(false)}>
+        <h2 className="text-lg font-semibold mb-2">Test DynamicForm</h2>
+        <DynamicForm
+          data={testFormData}
+          onSubmit={(values) => {
+            console.log("Submitted test form values:", values);
+            setTestFormOpen(false);
+          }}
+          onCancel={() => setTestFormOpen(false)}
+          getConsistentFormTemplate={() => ({
+            name: "Test Item",
+            status: "pending",
+            customerId: "123",
+            amount: 100,
+            isActive: true,
+            createdAt: "2024-01-01",
+            description: "This is a test item",
+            tags: ["test", "demo"],
+            metadata: {
+              category: "test",
+              priority: "high"
+            }
+          })}
+          isLoading={false}
+        />
       </Modal>
     </div>
   );
