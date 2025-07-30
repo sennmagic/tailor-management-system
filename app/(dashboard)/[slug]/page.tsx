@@ -11,6 +11,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbSeparator, BreadcrumbPage } from "@/components/ui/breadcrumb";
 import { StatisticsChart } from "@/components/ui/chart";
+import { OrderForm } from "@/components/ui/orderForm";
+import { OrderTable } from "@/components/ui/orderTable";
 import Link from "next/link";
 
 // Date picker components
@@ -126,66 +128,61 @@ function DynamicForm({
     console.log(`🔄 Fetching dropdown options for ${field} → calling endpoint: /${possibleEndpoints[0]}`);
     
     for (const endpoint of possibleEndpoints) {
-      try {
-        const { data: json, error } = await fetchAPI({ endpoint, method: 'GET' });
-        
-        if (error) {
-          console.log(`❌ Failed to fetch from /${endpoint}:`, error);
-          continue; // Try next endpoint
-        }
-        
-        // Try to find the array in the response
-        const arr = Array.isArray(json) ? json : (json?.data || json?.items || json?.results || json?.vendorInfo || []);
-        
-        if (!Array.isArray(arr) || arr.length === 0) {
-          console.log(`❌ No data found in /${endpoint}`);
-          continue; // Try next endpoint
-        }
-        
-        console.log(`📊 Raw data from /${endpoint}:`, arr);
-        
-        const options: Array<{ id: string; label: string }> = arr.map((item: any) => {
-          const id = item._id || item.id;
-          
-          if (!id) {
-            return null;
-          }
-          
-          // Dynamic display field detection - find the best field from actual data
-          let label = '';
-          
-          // First, try to find a field that contains the entity name (e.g., vendorName for VendorId)
-          const base = field.replace(/Id$/i, "").toLowerCase();
-          const entitySpecificField = base + 'Name'; // vendorName, customerName, etc.
-          
-          if (item[entitySpecificField] && typeof item[entitySpecificField] === 'string' && item[entitySpecificField].trim()) {
-            label = item[entitySpecificField].trim();
-          } else {
-            // Fallback: try common display fields
-            const commonFields = ['name', 'title', 'label', 'displayName', 'fullName'];
-            for (const displayField of commonFields) {
-              if (item[displayField] && typeof item[displayField] === 'string' && item[displayField].trim()) {
-                label = item[displayField].trim();
-                break;
-              }
-            }
-          }
-          
-          // Final fallback to ID if no display field found
-          if (!label) {
-            label = `Item ${id}`;
-          }
-          
-          return { id, label };
-        }).filter((item): item is { id: string; label: string } => item !== null); // Remove null items with proper typing
-        
-        console.log(`✅ Found ${options.length} options for ${field} from /${endpoint}:`, options);
-        setLookupOptions(prev => ({ ...prev, [field]: options }));
-        return; // Success, exit the loop
-      } catch (e) {
-        console.error(`❌ Error fetching from /${endpoint}:`, e);
+      const { data: json, error } = await fetchAPI({ endpoint, method: 'GET' });
+      
+      if (error) {
+        console.log(`❌ Failed to fetch from /${endpoint}:`, error);
         continue; // Try next endpoint
       }
+      
+      // Try to find the array in the response
+      const arr = Array.isArray(json) ? json : (json?.data || json?.items || json?.results || json?.vendorInfo || []);
+      
+      if (!Array.isArray(arr) || arr.length === 0) {
+        console.log(`❌ No data found in /${endpoint}`);
+        continue; // Try next endpoint
+      }
+      
+      console.log(`📊 Raw data from /${endpoint}:`, arr);
+      
+      const options: Array<{ id: string; label: string }> = arr.map((item: any) => {
+        const id = item._id || item.id;
+        
+        if (!id) {
+          return null;
+        }
+        
+        // Dynamic display field detection - find the best field from actual data
+        let label = '';
+        
+        // First, try to find a field that contains the entity name (e.g., vendorName for VendorId)
+        const base = field.replace(/Id$/i, "").toLowerCase();
+        const entitySpecificField = base + 'Name'; // vendorName, customerName, etc.
+        
+        if (item[entitySpecificField] && typeof item[entitySpecificField] === 'string' && item[entitySpecificField].trim()) {
+          label = item[entitySpecificField].trim();
+        } else {
+          // Fallback: try common display fields
+          const commonFields = ['name', 'title', 'label', 'displayName', 'fullName'];
+          for (const displayField of commonFields) {
+            if (item[displayField] && typeof item[displayField] === 'string' && item[displayField].trim()) {
+              label = item[displayField].trim();
+              break;
+            }
+          }
+        }
+        
+        // Final fallback to ID if no display field found
+        if (!label) {
+          label = `Item ${id}`;
+        }
+        
+        return { id, label };
+      }).filter((item): item is { id: string; label: string } => item !== null); // Remove null items with proper typing
+      
+      console.log(`✅ Found ${options.length} options for ${field} from /${endpoint}:`, options);
+      setLookupOptions(prev => ({ ...prev, [field]: options }));
+      return; // Success, exit the loop
     }
     
     // If we get here, all endpoints failed
@@ -1025,6 +1022,119 @@ function ViewDetailsModal({
     return String(value);
   }
 
+  // Helper function to render nested object data in a user-friendly way
+  function renderNestedData(data: any, title: string): React.ReactNode {
+    if (!data || typeof data !== 'object') {
+      return <div className="text-gray-500">No data available</div>;
+    }
+
+    const entries = Object.entries(data);
+    if (entries.length === 0) {
+      return <div className="text-gray-500">No data available</div>;
+    }
+
+    return (
+      <div className="space-y-3">
+        {entries.map(([key, value]) => {
+          if (key === '_id' || key === '__v' || key === 'createdAt' || key === 'updatedAt' || key === 'isDeleted') {
+            return null; // Skip internal fields
+          }
+
+          const displayKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+          
+          if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            // Nested object - show key-value pairs
+            const nestedEntries = Object.entries(value);
+            return (
+              <div key={key} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                <div className="font-medium text-gray-700 mb-2">{displayKey}</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                  {nestedEntries.map(([nestedKey, nestedValue]) => {
+                    if (nestedKey === '_id' || nestedKey === '__v') return null;
+                    const nestedDisplayKey = nestedKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                    return (
+                      <div key={nestedKey} className="flex justify-between">
+                        <span className="text-gray-600">{nestedDisplayKey}:</span>
+                        <span className="font-medium">{String(nestedValue)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          } else {
+            // Simple value
+            return (
+              <div key={key} className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="text-gray-600">{displayKey}</span>
+                <span className="font-medium">{String(value)}</span>
+              </div>
+            );
+          }
+        })}
+      </div>
+    );
+  }
+
+  // Helper function to render array data in a user-friendly way
+  function renderArrayData(data: any[], title: string): React.ReactNode {
+    if (!Array.isArray(data) || data.length === 0) {
+      return <div className="text-gray-500">No items available</div>;
+    }
+
+    return (
+      <div className="space-y-4">
+        {data.map((item, index) => (
+          <div key={index} className="border border-gray-200 rounded-lg p-4 bg-white">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+              <span className="font-medium text-gray-700">Item {index + 1}</span>
+            </div>
+            {typeof item === 'object' && item !== null ? (
+              <div className="space-y-2">
+                {Object.entries(item).map(([key, value]) => {
+                  if (key === '_id' || key === '__v') return null;
+                  const displayKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                  
+                  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    // Nested object in array item
+                    return (
+                      <div key={key} className="border border-gray-100 rounded p-2 bg-gray-50">
+                        <div className="font-medium text-gray-600 mb-1">{displayKey}</div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-sm">
+                          {Object.entries(value).map(([nestedKey, nestedValue]) => {
+                            if (nestedKey === '_id' || nestedKey === '__v') return null;
+                            const nestedDisplayKey = nestedKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                            return (
+                              <div key={nestedKey} className="flex justify-between">
+                                <span className="text-gray-500">{nestedDisplayKey}:</span>
+                                <span className="font-medium">{String(nestedValue)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    // Simple value in array item
+                    return (
+                      <div key={key} className="flex justify-between items-center py-1">
+                        <span className="text-gray-600">{displayKey}</span>
+                        <span className="font-medium">{String(value)}</span>
+                      </div>
+                    );
+                  }
+                })}
+              </div>
+            ) : (
+              <div className="text-gray-700">{String(item)}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   // Helper function to check if value should be displayed
   function shouldDisplayField(key: string, value: unknown): boolean {
     const skipFields = ["_id", "__v", "createdAt", "updatedAt", "isDeleted"];
@@ -1064,40 +1174,71 @@ function ViewDetailsModal({
   function getStatusBadgeStyle(status: string): { bg: string; text: string; border: string; icon?: string } {
     const lowerStatus = status.toLowerCase();
     
+    // Order statuses
+    if (lowerStatus === 'pending') {
+      return { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', icon: '⏳' };
+    }
+    if (lowerStatus === 'cutting') {
+      return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: '⟳' };
+    }
+    if (lowerStatus === 'sewing') {
+      return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: '⟳' };
+    }
+    if (lowerStatus === 'ready') {
+      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: '✓' };
+    }
+    if (lowerStatus === 'delivered') {
+      return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: '✓' };
+    }
+    if (lowerStatus === 'cancelled') {
+      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: '✗' };
+    }
+    
+    // Payment statuses
+    if (lowerStatus === 'paid') {
+      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: '✓' };
+    }
+    if (lowerStatus === 'unpaid') {
+      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: '✗' };
+    }
+    if (lowerStatus === 'partial') {
+      return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', icon: '⚠' };
+    }
+    
     // Success/Positive statuses
-    if (lowerStatus.includes('paid') || lowerStatus.includes('completed') || lowerStatus.includes('approved') || 
+    if (lowerStatus.includes('completed') || lowerStatus.includes('approved') || 
         lowerStatus.includes('active') || lowerStatus.includes('success') || lowerStatus.includes('done') ||
-        lowerStatus.includes('finished') || lowerStatus.includes('delivered') || lowerStatus.includes('confirmed')) {
-      return { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200', icon: '✓' };
+        lowerStatus.includes('finished') || lowerStatus.includes('confirmed')) {
+      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: '✓' };
     }
     
     // Warning/Pending statuses
-    if (lowerStatus.includes('pending') || lowerStatus.includes('processing') || lowerStatus.includes('waiting') ||
+    if (lowerStatus.includes('processing') || lowerStatus.includes('waiting') ||
         lowerStatus.includes('on-hold') || lowerStatus.includes('scheduled') || lowerStatus.includes('draft')) {
-      return { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200', icon: '⏳' };
+      return { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', icon: '⏳' };
     }
     
     // Error/Failed statuses
-    if (lowerStatus.includes('failed') || lowerStatus.includes('cancelled') || lowerStatus.includes('rejected') || 
+    if (lowerStatus.includes('failed') || lowerStatus.includes('rejected') || 
         lowerStatus.includes('inactive') || lowerStatus.includes('error') || lowerStatus.includes('declined') ||
         lowerStatus.includes('expired') || lowerStatus.includes('void')) {
-      return { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200', icon: '✗' };
+      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: '✗' };
     }
     
     // Progress/Partial statuses
-    if (lowerStatus.includes('progress') || lowerStatus.includes('partial') || lowerStatus.includes('in-progress') ||
+    if (lowerStatus.includes('progress') || lowerStatus.includes('in-progress') ||
         lowerStatus.includes('ongoing') || lowerStatus.includes('running') || lowerStatus.includes('working')) {
-      return { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200', icon: '⟳' };
+      return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: '⟳' };
     }
     
     // Info/Neutral statuses
     if (lowerStatus.includes('info') || lowerStatus.includes('new') || lowerStatus.includes('created') ||
         lowerStatus.includes('submitted') || lowerStatus.includes('received')) {
-      return { bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-200', icon: 'ℹ' };
+      return { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', icon: 'ℹ' };
     }
     
     // Default gray for unknown statuses
-    return { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-200', icon: '•' };
+    return { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', icon: '•' };
   }
 
   // Helper function to format status value with badge
@@ -1118,8 +1259,8 @@ function ViewDetailsModal({
       .join(' ');
     
     return (
-      <span className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium border shadow-sm ${style.bg} ${style.text} ${style.border}`}>
-        {style.icon && <span className="text-base">{style.icon}</span>}
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium border ${style.bg} ${style.text} ${style.border}`}>
+        {style.icon && <span className="text-sm">{style.icon}</span>}
         <span>{formattedText}</span>
       </span>
     );
@@ -1251,8 +1392,8 @@ function ViewDetailsModal({
                     <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
                     {formatFieldName(key)}
                   </div>
-                  <div className="bg-white rounded border border-purple-200 p-3 text-sm text-gray-700 font-mono max-h-64 overflow-y-auto shadow-sm">
-                    {JSON.stringify(value, null, 2)}
+                  <div className="bg-white rounded border border-purple-200 p-3 shadow-sm max-h-64 overflow-y-auto">
+                    {renderNestedData(value, key)}
                   </div>
                 </div>
               ))}
@@ -1275,10 +1416,8 @@ function ViewDetailsModal({
                     {formatFieldName(key)} ({Array.isArray(value) ? value.length : 0} items)
                   </div>
                   {Array.isArray(value) && value.length > 0 && (
-                    <div className="bg-white rounded border border-orange-200 p-3 shadow-sm">
-                      <div className="text-sm text-gray-700 font-mono max-h-64 overflow-y-auto">
-                        {JSON.stringify(value, null, 2)}
-                      </div>
+                    <div className="bg-white rounded border border-orange-200 p-3 shadow-sm max-h-64 overflow-y-auto">
+                      {renderArrayData(value, key)}
                     </div>
                   )}
                 </div>
@@ -1330,6 +1469,9 @@ export default function SlugPage() {
   const [isDownloading, setIsDownloading] = useState<number | null>(null);
   const [invoicePreview, setInvoicePreview] = useState<{ url: string; customerId: string; statusData?: any } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // Status filtering for orders
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   useEffect(() => {
     if (!slug) return;
@@ -1343,13 +1485,33 @@ export default function SlugPage() {
     });
   }, [slug]);
 
+  // Filter orders by status
+  const filteredOrders = useMemo(() => {
+    if (slug !== 'orders' || statusFilter === 'all') {
+      return apiResponse;
+    }
+    return apiResponse.filter((order: any) => {
+      const orderStatus = order.orderStatus || order.status || '';
+      return orderStatus.toLowerCase() === statusFilter.toLowerCase();
+    });
+  }, [apiResponse, statusFilter, slug]);
+
   const allKeys = useMemo(() => {
-    const keys = apiResponse[0] ? Object.keys(apiResponse[0]).slice(0, 4) : [];
+    let keys = apiResponse[0] ? Object.keys(apiResponse[0]).slice(0, 4) : [];
     if (keys.length === 0 && apiResponse.length > 0) {
       return ["value"];
     }
+    
+    // For orders, ensure status fields are included and prioritized
+    if (slug === 'orders' && apiResponse[0]) {
+      const orderKeys = Object.keys(apiResponse[0]);
+      const statusKeys = orderKeys.filter(key => isStatusField(key));
+      const nonStatusKeys = orderKeys.filter(key => !isStatusField(key)).slice(0, 3);
+      keys = [...statusKeys, ...nonStatusKeys];
+    }
+    
     return keys;
-  }, [apiResponse]);
+  }, [apiResponse, slug]);
 
   // Helper function to check if field is a status field
   function isStatusField(fieldName: string): boolean {
@@ -1409,40 +1571,71 @@ export default function SlugPage() {
   function getStatusBadgeStyle(status: string): { bg: string; text: string; border: string; icon?: string } {
     const lowerStatus = status.toLowerCase();
     
+    // Order statuses
+    if (lowerStatus === 'pending') {
+      return { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', icon: '⏳' };
+    }
+    if (lowerStatus === 'cutting') {
+      return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: '⟳' };
+    }
+    if (lowerStatus === 'sewing') {
+      return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: '⟳' };
+    }
+    if (lowerStatus === 'ready') {
+      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: '✓' };
+    }
+    if (lowerStatus === 'delivered') {
+      return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: '✓' };
+    }
+    if (lowerStatus === 'cancelled') {
+      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: '✗' };
+    }
+    
+    // Payment statuses
+    if (lowerStatus === 'paid') {
+      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: '✓' };
+    }
+    if (lowerStatus === 'unpaid') {
+      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: '✗' };
+    }
+    if (lowerStatus === 'partial') {
+      return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', icon: '⚠' };
+    }
+    
     // Success/Positive statuses
-    if (lowerStatus.includes('paid') || lowerStatus.includes('completed') || lowerStatus.includes('approved') || 
+    if (lowerStatus.includes('completed') || lowerStatus.includes('approved') || 
         lowerStatus.includes('active') || lowerStatus.includes('success') || lowerStatus.includes('done') ||
-        lowerStatus.includes('finished') || lowerStatus.includes('delivered') || lowerStatus.includes('confirmed')) {
-      return { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200', icon: '✓' };
+        lowerStatus.includes('finished') || lowerStatus.includes('confirmed')) {
+      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: '✓' };
     }
     
     // Warning/Pending statuses
-    if (lowerStatus.includes('pending') || lowerStatus.includes('processing') || lowerStatus.includes('waiting') ||
+    if (lowerStatus.includes('processing') || lowerStatus.includes('waiting') ||
         lowerStatus.includes('on-hold') || lowerStatus.includes('scheduled') || lowerStatus.includes('draft')) {
-      return { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200', icon: '⏳' };
+      return { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', icon: '⏳' };
     }
     
     // Error/Failed statuses
-    if (lowerStatus.includes('failed') || lowerStatus.includes('cancelled') || lowerStatus.includes('rejected') || 
+    if (lowerStatus.includes('failed') || lowerStatus.includes('rejected') || 
         lowerStatus.includes('inactive') || lowerStatus.includes('error') || lowerStatus.includes('declined') ||
         lowerStatus.includes('expired') || lowerStatus.includes('void')) {
-      return { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200', icon: '✗' };
+      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: '✗' };
     }
     
     // Progress/Partial statuses
-    if (lowerStatus.includes('progress') || lowerStatus.includes('partial') || lowerStatus.includes('in-progress') ||
+    if (lowerStatus.includes('progress') || lowerStatus.includes('in-progress') ||
         lowerStatus.includes('ongoing') || lowerStatus.includes('running') || lowerStatus.includes('working')) {
-      return { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200', icon: '⟳' };
+      return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: '⟳' };
     }
     
     // Info/Neutral statuses
     if (lowerStatus.includes('info') || lowerStatus.includes('new') || lowerStatus.includes('created') ||
         lowerStatus.includes('submitted') || lowerStatus.includes('received')) {
-      return { bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-200', icon: 'ℹ' };
+      return { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', icon: 'ℹ' };
     }
     
     // Default gray for unknown statuses
-    return { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-200', icon: '•' };
+    return { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', icon: '•' };
   }
 
   // Helper function to format status value with badge
@@ -1463,8 +1656,8 @@ export default function SlugPage() {
       .join(' ');
     
     return (
-      <span className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium border shadow-sm ${style.bg} ${style.text} ${style.border}`}>
-        {style.icon && <span className="text-base">{style.icon}</span>}
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium border ${style.bg} ${style.text} ${style.border}`}>
+        {style.icon && <span className="text-sm">{style.icon}</span>}
         <span>{formattedText}</span>
       </span>
     );
@@ -1497,30 +1690,29 @@ export default function SlugPage() {
 
   async function handleEditSave(values: Record<string, unknown>) {
     setIsEditing(true);
-    const id = (values as Record<string, unknown>)._id as string | undefined;
+    const itemToEdit = apiResponse[editIdx!];
+    const id = itemToEdit._id as string;
     const endpointSlug = typeof slug === 'string' ? slug : '';
     const filteredValues = filterSubmitFields(values);
     
-    try {
-      const { error } = await fetchAPI({
-        endpoint: `${endpointSlug}/${id}`,
-        method: "PUT",
-        data: filteredValues,
-        withAuth: true,
+    const { error } = await fetchAPI({
+      endpoint: `${endpointSlug}/${id}`,
+      method: "PUT",
+      data: filteredValues,
+      withAuth: true,
+    });
+    
+    if (error) {
+      showAlert("Failed to update: " + error, "destructive");
+    } else {
+      fetchAPI({ endpoint: endpointSlug, method: "GET" }).then(({ data }) => {
+        setApiResponse(extractDataArray(data));
       });
-      
-      if (error) {
-        showAlert("Failed to update: " + error, "destructive");
-      } else {
-        fetchAPI({ endpoint: endpointSlug, method: "GET" }).then(({ data }) => {
-          setApiResponse(extractDataArray(data));
-        });
-        setEditIdx(null);
-        showAlert("Update successful!", "success");
-      }
-    } finally {
-      setIsEditing(false);
+      setEditIdx(null);
+      showAlert("Update successful!", "success");
     }
+    
+    setIsEditing(false);
   }
 
   async function handleDelete(idx: number) {
@@ -1529,26 +1721,22 @@ export default function SlugPage() {
     const id = itemToDelete._id as string;
     const endpointSlug = typeof slug === 'string' ? slug : '';
     
-    try {
-      const { error } = await fetchAPI({
-        endpoint: `${endpointSlug}/${id}`,
-        method: "DELETE",
-        withAuth: true,
-      });
-      
-      if (error) {
-        showAlert("Failed to delete: " + error, "destructive");
-      } else {
-        // Update local state only after successful server deletion
-        setApiResponse((prev) => prev.filter((_, i) => i !== idx));
-        setDeleteIdx(null);
-        showAlert("Deleted successfully!", "success");
-      }
-    } catch {
-      showAlert("Failed to delete item", "destructive");
-    } finally {
-      setIsDeleting(null);
+    const { error } = await fetchAPI({
+      endpoint: `${endpointSlug}/${id}`,
+      method: "DELETE",
+      withAuth: true,
+    });
+    
+    if (error) {
+      showAlert("Failed to delete: " + error, "destructive");
+    } else {
+      // Update local state only after successful server deletion
+      setApiResponse((prev) => prev.filter((_, i) => i !== idx));
+      setDeleteIdx(null);
+      showAlert("Deleted successfully!", "success");
     }
+    
+    setIsDeleting(null);
   }
 
   async function handleStatusUpdate(idx: number, newStatus: string) {
@@ -1557,62 +1745,60 @@ export default function SlugPage() {
     const id = itemToUpdate._id as string;
     const endpointSlug = typeof slug === 'string' ? slug : '';
     
-    try {
-      const { error } = await fetchAPI({
-        endpoint: `${endpointSlug}/${id}`,
-        method: "PUT",
-        data: { status: newStatus },
-        withAuth: true,
-      });
-      
-      if (error) {
-        showAlert("Failed to update status: " + error, "destructive");
-      } else {
-        // Update local state
-        setApiResponse((prev) => 
-          prev.map((item, i) => 
-            i === idx ? { ...item, status: newStatus } : item
-          )
-        );
-        showAlert("Status updated successfully!", "success");
-      }
-    } catch {
-      showAlert("Failed to update status", "destructive");
-    } finally {
-      setIsUpdatingStatus(null);
+    const { error } = await fetchAPI({
+      endpoint: `${endpointSlug}/${id}`,
+      method: "PUT",
+      data: { status: newStatus },
+      withAuth: true,
+    });
+    
+    if (error) {
+      showAlert("Failed to update status: " + error, "destructive");
+    } else {
+      // Update local state
+      setApiResponse((prev) => 
+        prev.map((item, i) => 
+          i === idx ? { ...item, status: newStatus } : item
+        )
+      );
+      showAlert("Status updated successfully!", "success");
     }
+    
+    setIsUpdatingStatus(null);
   }
 
   async function handleStatusFieldUpdate(idx: number, fieldName: string, newValue: string) {
+    // Prevent rapid updates
+    if (isUpdatingStatus === idx) return;
+    
     setIsUpdatingStatus(idx);
     const itemToUpdate = apiResponse[idx];
     const id = itemToUpdate._id as string;
     const endpointSlug = typeof slug === 'string' ? slug : '';
     
-    try {
-      const { error } = await fetchAPI({
-        endpoint: `${endpointSlug}/${id}`,
-        method: "PUT",
-        data: { [fieldName]: newValue },
-        withAuth: true,
-      });
-      
-      if (error) {
-        showAlert(`Failed to update ${fieldName}: ` + error, "destructive");
-      } else {
-        // Update local state
-        setApiResponse((prev) => 
-          prev.map((item, i) => 
-            i === idx ? { ...item, [fieldName]: newValue } : item
-          )
-        );
-        showAlert(`${fieldName.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())} updated successfully!`, "success");
-      }
-    } catch {
-      showAlert(`Failed to update ${fieldName}`, "destructive");
-    } finally {
-      setIsUpdatingStatus(null);
+    // Add small delay to prevent lag
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    const { error } = await fetchAPI({
+      endpoint: `${endpointSlug}/${id}`,
+      method: "PUT",
+      data: { [fieldName]: newValue },
+      withAuth: true,
+    });
+    
+    if (error) {
+      showAlert(`Failed to update ${fieldName}: ` + error, "destructive");
+    } else {
+      // Update local state
+      setApiResponse((prev) => 
+        prev.map((item, i) => 
+          i === idx ? { ...item, [fieldName]: newValue } : item
+        )
+      );
+      showAlert(`${fieldName.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())} updated successfully!`, "success");
     }
+    
+    setIsUpdatingStatus(null);
   }
 
   async function handlePreviewInvoice(idx: number) {
@@ -1626,103 +1812,91 @@ export default function SlugPage() {
       return;
     }
     
-    try {
-      const { data, error } = await fetchAPI({
-        endpoint: `invoice/${customerId}`,
-        method: "GET",
-        withAuth: true,
+    const { data, error } = await fetchAPI({
+      endpoint: `invoice/${customerId}`,
+      method: "GET",
+      withAuth: true,
+    });
+    
+    if (error) {
+      showAlert("Failed to load invoice preview: " + error, "destructive");
+    } else if (data && data.previewUrl) {
+      // Find status fields in the order data
+      const statusFields: Record<string, any> = {};
+      Object.entries(itemToDownload).forEach(([key, value]) => {
+        if (key.toLowerCase().includes('status')) {
+          statusFields[key] = value;
+        }
       });
       
-      if (error) {
-        showAlert("Failed to load invoice preview: " + error, "destructive");
-      } else if (data && data.previewUrl) {
-        // Find status fields in the order data
-        const statusFields: Record<string, any> = {};
-        Object.entries(itemToDownload).forEach(([key, value]) => {
-          if (key.toLowerCase().includes('status')) {
-            statusFields[key] = value;
-          }
-        });
-        
-        setInvoicePreview({ 
-          url: data.previewUrl, 
-          customerId,
-          statusData: statusFields
-        });
-      } else {
-        showAlert("No preview URL received from server", "destructive");
-      }
-    } catch (error) {
-      showAlert("Failed to load invoice preview", "destructive");
-    } finally {
-      setIsDownloading(null);
+      setInvoicePreview({ 
+        url: data.previewUrl, 
+        customerId,
+        statusData: statusFields
+      });
+    } else {
+      showAlert("No preview URL received from server", "destructive");
     }
+    
+    setIsDownloading(null);
   }
 
   async function handleDownloadReceipt(customerId: string) {
-    try {
-      const { data, error } = await fetchAPI({
-        endpoint: `invoice/${customerId}/download`,
-        method: "GET",
-        withAuth: true,
-      });
-      
-      if (error) {
-        showAlert("Failed to download receipt: " + error, "destructive");
-      } else if (data && data.downloadUrl) {
-        // Create a temporary link to download the file
-        const link = document.createElement('a');
-        link.href = data.downloadUrl;
-        link.download = `receipt-${customerId}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        showAlert("Receipt downloaded successfully!", "success");
-        setInvoicePreview(null);
-      } else {
-        showAlert("No download URL received from server", "destructive");
-      }
-    } catch (error) {
-      showAlert("Failed to download receipt", "destructive");
+    const { data, error } = await fetchAPI({
+      endpoint: `invoice/${customerId}/download`,
+      method: "GET",
+      withAuth: true,
+    });
+    
+    if (error) {
+      showAlert("Failed to download receipt: " + error, "destructive");
+    } else if (data && data.downloadUrl) {
+      // Create a temporary link to download the file
+      const link = document.createElement('a');
+      link.href = data.downloadUrl;
+      link.download = `receipt-${customerId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showAlert("Receipt downloaded successfully!", "success");
+      setInvoicePreview(null);
+    } else {
+      showAlert("No download URL received from server", "destructive");
     }
   }
 
   async function handleStatusChangeInPreview(statusKey: string, newValue: string) {
     if (!invoicePreview) return;
     
-    try {
-      const { error } = await fetchAPI({
-        endpoint: `orders/${invoicePreview.customerId}`,
-        method: "PUT",
-        data: { [statusKey]: newValue },
-        withAuth: true,
-      });
+    const { error } = await fetchAPI({
+      endpoint: `orders/${invoicePreview.customerId}`,
+      method: "PUT",
+      data: { [statusKey]: newValue },
+      withAuth: true,
+    });
+    
+    if (error) {
+      showAlert("Failed to update status: " + error, "destructive");
+    } else {
+      // Update local state
+      setApiResponse((prev) => 
+        prev.map((item) => 
+          item.customerId === invoicePreview.customerId 
+            ? { ...item, [statusKey]: newValue }
+            : item
+        )
+      );
       
-      if (error) {
-        showAlert("Failed to update status: " + error, "destructive");
-      } else {
-        // Update local state
-        setApiResponse((prev) => 
-          prev.map((item) => 
-            item.customerId === invoicePreview.customerId 
-              ? { ...item, [statusKey]: newValue }
-              : item
-          )
-        );
-        
-        // Update preview state
-        setInvoicePreview(prev => prev ? {
-          ...prev,
-          statusData: {
-            ...prev.statusData,
-            [statusKey]: newValue
-          }
-        } : null);
-        
-        showAlert("Status updated successfully!", "success");
-      }
-    } catch (error) {
-      showAlert("Failed to update status", "destructive");
+      // Update preview state
+      setInvoicePreview(prev => prev ? {
+        ...prev,
+        statusData: {
+          ...prev.statusData,
+          [statusKey]: newValue
+        }
+      } : null);
+      
+      showAlert("Status updated successfully!", "success");
     }
   }
 
@@ -1790,26 +1964,24 @@ export default function SlugPage() {
     const endpointSlug = typeof slug === 'string' ? slug : '';
     const filteredValues = filterSubmitFields(values);
     
-    try {
-      const { error } = await fetchAPI({
-        endpoint: endpointSlug,
-        method: "POST",
-        data: filteredValues,
-        withAuth: true,
+    const { error } = await fetchAPI({
+      endpoint: endpointSlug,
+      method: "POST",
+      data: filteredValues,
+      withAuth: true,
+    });
+    
+    if (error) {
+      showAlert("Failed to create: " + error, "destructive");
+    } else {
+      fetchAPI({ endpoint: endpointSlug, method: "GET" }).then(({ data }) => {
+        setApiResponse(extractDataArray(data));
       });
-      
-      if (error) {
-        showAlert("Failed to create: " + error, "destructive");
-      } else {
-        fetchAPI({ endpoint: endpointSlug, method: "GET" }).then(({ data }) => {
-          setApiResponse(extractDataArray(data));
-        });
-        setAddOpen(false);
-        showAlert("Created successfully!", "success");
-      }
-    } finally {
-      setIsAdding(false);
+      setAddOpen(false);
+      showAlert("Created successfully!", "success");
     }
+    
+    setIsAdding(false);
   }
 
   return (
@@ -1838,7 +2010,9 @@ export default function SlugPage() {
       </div>
       
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">{slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : 'Item'}</h1>
+        <h1 className="text-2xl font-bold">
+          {slug === 'orders' ? 'Orders Management' : (slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : 'Item')}
+        </h1>
         <Button
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
           onClick={() => setAddOpen(true)}
@@ -1850,155 +2024,281 @@ export default function SlugPage() {
               Adding...
             </div>
           ) : (
-            `+ Add ${slug ?? 'Item'}`
+            slug === 'orders' ? '+ Create Order' : `+ Add ${slug ?? 'Item'}`
           )}
         </Button>
       </div>
-      <div className="overflow-x-auto bg-white rounded shadow">
-        {loading ? (
-          <div className="p-6">
-            <Skeleton className="h-8 w-full mb-2" />
-            <Skeleton className="h-8 w-full mb-2" />
-            <Skeleton className="h-8 w-full mb-2" />
-          </div>
-        ) : error ? (
-          <div className="p-6 text-center text-red-500">{error}</div>
-        ) : apiResponse.length === 0 ? (
-          <div className="p-6 text-center text-gray-500">No data found.</div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {allKeys.map((key) => (
-                  <TableHead key={key}>{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</TableHead>
-                ))}
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {apiResponse.length > 0 && allKeys.length > 0 && Object.keys(apiResponse[0]).length === 0 ? (
+      
+      {/* Show OrderForm when addOpen is true for orders */}
+      {slug === 'orders' && addOpen && (
+        <OrderForm 
+          slug={slug} 
+          onClose={() => setAddOpen(false)}
+          isEdit={false}
+        />
+      )}
+      
+      {/* Status filter buttons for orders */}
+      {slug === 'orders' && !addOpen && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          <Button
+            variant={statusFilter === 'all' ? 'default' : 'outline'}
+            onClick={() => setStatusFilter('all')}
+            className="text-sm"
+          >
+            All Orders
+          </Button>
+          <Button
+            variant={statusFilter === 'pending' ? 'default' : 'outline'}
+            onClick={() => setStatusFilter('pending')}
+            className="text-sm bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+          >
+            Pending
+          </Button>
+          <Button
+            variant={statusFilter === 'cutting' ? 'default' : 'outline'}
+            onClick={() => setStatusFilter('cutting')}
+            className="text-sm bg-blue-100 text-blue-800 hover:bg-blue-200"
+          >
+            Cutting
+          </Button>
+          <Button
+            variant={statusFilter === 'sewing' ? 'default' : 'outline'}
+            onClick={() => setStatusFilter('sewing')}
+            className="text-sm bg-purple-100 text-purple-800 hover:bg-purple-200"
+          >
+            Sewing
+          </Button>
+          <Button
+            variant={statusFilter === 'ready' ? 'default' : 'outline'}
+            onClick={() => setStatusFilter('ready')}
+            className="text-sm bg-green-100 text-green-800 hover:bg-green-200"
+          >
+            Ready
+          </Button>
+          <Button
+            variant={statusFilter === 'delivered' ? 'default' : 'outline'}
+            onClick={() => setStatusFilter('delivered')}
+            className="text-sm bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+          >
+            Delivered
+          </Button>
+          <Button
+            variant={statusFilter === 'cancelled' ? 'default' : 'outline'}
+            onClick={() => setStatusFilter('cancelled')}
+            className="text-sm bg-red-100 text-red-800 hover:bg-red-200"
+          >
+            Cancelled
+          </Button>
+        </div>
+      )}
+      
+      {/* Use improved OrderTable for orders page, regular table for other pages */}
+      {!addOpen && (
+        <>
+          {slug === 'orders' ? (
+            <OrderTable
+              onEdit={(order) => {
+                // Convert order to the format expected by the existing edit functionality
+                const orderIndex = apiResponse.findIndex(item => item._id === order._id);
+                if (orderIndex !== -1) {
+                  setEditIdx(orderIndex);
+                }
+              }}
+              onView={(order) => {
+                const orderIndex = apiResponse.findIndex(item => item._id === order._id);
+                if (orderIndex !== -1) {
+                  setViewIdx(orderIndex);
+                }
+              }}
+              onDelete={(orderId) => {
+                const orderIndex = apiResponse.findIndex(item => item._id === orderId);
+                if (orderIndex !== -1) {
+                  setDeleteIdx(orderIndex);
+                }
+              }}
+              onStatusChange={(orderId, status, field) => {
+                // This will be handled by the OrderTable component itself
+                console.log('Status changed:', orderId, status, field);
+              }}
+            />
+          ) : (
+        <div className="overflow-x-auto bg-white rounded shadow">
+          {loading ? (
+            <div className="p-6">
+              <Skeleton className="h-8 w-full mb-2" />
+              <Skeleton className="h-8 w-full mb-2" />
+              <Skeleton className="h-8 w-full mb-2" />
+            </div>
+          ) : error ? (
+            <div className="p-6 text-center text-red-500">{error}</div>
+          ) : filteredOrders.length === 0 ? (
+            <div className="p-6 text-center text-gray-500">
+              {statusFilter !== 'all' ? `No ${statusFilter} orders found.` : 'No data found.'}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
                   {allKeys.map((key) => (
-                    <TableCell key={key}>
-                      <span className="text-gray-400">{'{}'}</span>
-                    </TableCell>
+                    <TableHead key={key}>{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</TableHead>
                   ))}
-                  <TableCell />
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ) : (
-                apiResponse.map((row, idx) => (
-                  <TableRow
-                    key={idx}
-                    className="hover:bg-blue-50 transition"
-                  >
+              </TableHeader>
+              <TableBody>
+                {apiResponse.length > 0 && allKeys.length > 0 && Object.keys(apiResponse[0]).length === 0 ? (
+                  <TableRow>
                     {allKeys.map((key) => (
                       <TableCell key={key}>
-                        {isStatusField(key) ? (
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1">
-                              {renderCellValue(row[key], key)}
-                            </div>
-                            <select
-                              value={String(row[key] || '')}
-                              onChange={(e) => handleStatusFieldUpdate(idx, key, e.target.value)}
-                              disabled={isUpdatingStatus === idx}
-                              className="text-xs px-2 py-1 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 min-w-24"
-                              title={`Change ${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`}
-                            >
-                              <option value="">Select Status</option>
-                              {getStatusOptions(key).map((status: string) => (
-                                <option key={status} value={status}>
-                                  {status.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
-                                </option>
-                              ))}
-                            </select>
-                            {isUpdatingStatus === idx && (
-                              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                            )}
-                          </div>
-                        ) : (
-                          renderCellValue(row[key], key)
-                        )}
+                        <span className="text-gray-400">{'{}'}</span>
                       </TableCell>
                     ))}
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={() => setViewIdx(idx)}
-                          className="bg-blue-500 text-white text-xs flex items-center gap-1"
-                          title="View details"
-                          size="icon"
-                        >
-                          <MdVisibility className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          onClick={() => setEditIdx(idx)}
-                          className="bg-yellow-400 text-xs flex items-center gap-1"
-                          title="Edit"
-                          size="icon"
-                          disabled={isEditing}
-                        >
-                          {isEditing && editIdx === idx ? (
-                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                    <TableCell />
+                  </TableRow>
+                ) : (
+                  filteredOrders.map((row, idx) => (
+                    <TableRow
+                      key={idx}
+                      className="hover:bg-blue-50 transition"
+                    >
+                      {allKeys.map((key) => (
+                        <TableCell key={key}>
+                          {isStatusField(key) ? (
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1">
+                                {formatStatusValue(row[key])}
+                              </div>
+                              <select
+                                value={String(row[key] || '')}
+                                onChange={(e) => handleStatusFieldUpdate(idx, key, e.target.value)}
+                                disabled={isUpdatingStatus === idx}
+                                className="text-xs px-2 py-1 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 min-w-24"
+                                title={`Change ${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`}
+                              >
+                                <option value="">Select Status</option>
+                                {getStatusOptions(key).map((status: string) => (
+                                  <option key={status} value={status}>
+                                    {status.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                                  </option>
+                                ))}
+                              </select>
+                              {isUpdatingStatus === idx && (
+                                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                              )}
+                            </div>
                           ) : (
-                            <MdEdit className="w-4 h-4" />
+                            renderCellValue(row[key], key)
                           )}
-                        </Button>
-                        <Button
-                          onClick={() => setDeleteIdx(idx)}
-                          className="bg-red-500 text-white text-xs flex items-center gap-1"
-                          title="Delete"
-                          size="icon"
-                          disabled={isDeleting === idx}
-                        >
-                          {isDeleting === idx ? (
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          ) : (
-                            <MdDelete className="w-4 h-4" />
-                          )}
-                        </Button>
-                        {slug === 'orders' && (
+                        </TableCell>
+                      ))}
+                      <TableCell>
+                        <div className="flex gap-2">
                           <Button
-                            onClick={() => handlePreviewInvoice(idx)}
-                            className="bg-green-500 text-white text-xs flex items-center gap-1"
-                            title="Preview Invoice"
+                            onClick={() => setViewIdx(idx)}
+                            className="bg-blue-500 text-white text-xs flex items-center gap-1"
+                            title="View details"
                             size="icon"
-                            disabled={isDownloading === idx}
                           >
-                            {isDownloading === idx ? (
-                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            <MdVisibility className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            onClick={() => setEditIdx(idx)}
+                            className="bg-yellow-400 text-xs flex items-center gap-1"
+                            title="Edit"
+                            size="icon"
+                            disabled={isEditing}
+                          >
+                            {isEditing && editIdx === idx ? (
+                              <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                             ) : (
-                              <MdDownload className="w-4 h-4" />
+                              <MdEdit className="w-4 h-4" />
                             )}
                           </Button>
-                        )}
-
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        )}
-      </div>
+                          {slug === 'orders' && (
+                            <Button
+                              onClick={() => {
+                                // Find the first status field and update it
+                                const statusField = allKeys.find(key => isStatusField(key));
+                                if (statusField) {
+                                  const currentStatus = String(row[statusField] || '');
+                                  const options = getStatusOptions(statusField);
+                                  const currentIndex = options.indexOf(currentStatus);
+                                  const nextStatus = options[(currentIndex + 1) % options.length];
+                                  handleStatusFieldUpdate(idx, statusField, nextStatus);
+                                }
+                              }}
+                              className="bg-green-500 text-white text-xs flex items-center gap-1"
+                              title="Quick Status Change"
+                              size="icon"
+                              disabled={isUpdatingStatus === idx}
+                            >
+                              {isUpdatingStatus === idx ? (
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                              ) : (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                              )}
+                            </Button>
+                          )}
+                          <Button
+                            onClick={() => setDeleteIdx(idx)}
+                            className="bg-red-500 text-white text-xs flex items-center gap-1"
+                            title="Delete"
+                            size="icon"
+                            disabled={isDeleting === idx}
+                          >
+                            {isDeleting === idx ? (
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <MdDelete className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+          )}
+        </>
+      )}
       <ViewDetailsModal 
         data={viewIdx !== null ? apiResponse[viewIdx] : null}
         open={viewIdx !== null}
         onClose={() => setViewIdx(null)}
       />
-      <Modal open={editIdx !== null} onClose={() => setEditIdx(null)}>
-        <h2 className="text-lg font-semibold mb-2">Edit Row</h2>
-        {editIdx !== null && (
-          <DynamicForm
-            data={apiResponse[editIdx]}
-            onSubmit={handleEditSave}
-            onCancel={() => setEditIdx(null)}
-            getConsistentFormTemplate={getConsistentFormTemplate}
-            isLoading={isEditing}
-          />
-        )}
-      </Modal>
+      {/* Edit Modal - Use OrderForm for orders, DynamicForm for others */}
+      {slug === 'orders' ? (
+        <Modal open={editIdx !== null} onClose={() => setEditIdx(null)}>
+          <h2 className="text-lg font-semibold mb-2">Edit Order</h2>
+          {editIdx !== null && (
+            <OrderForm
+              slug={slug}
+              onClose={() => setEditIdx(null)}
+              isEdit={true}
+              editData={apiResponse[editIdx]}
+            />
+          )}
+        </Modal>
+      ) : (
+        <Modal open={editIdx !== null} onClose={() => setEditIdx(null)}>
+          <h2 className="text-lg font-semibold mb-2">Edit Row</h2>
+          {editIdx !== null && (
+            <DynamicForm
+              data={apiResponse[editIdx]}
+              onSubmit={handleEditSave}
+              onCancel={() => setEditIdx(null)}
+              getConsistentFormTemplate={getConsistentFormTemplate}
+              isLoading={isEditing}
+            />
+          )}
+        </Modal>
+      )}
       <Modal open={deleteIdx !== null} onClose={() => setDeleteIdx(null)}>
         <h2 className="text-lg font-semibold mb-2">Are you sure you want to delete?</h2>
         <div className="flex gap-2 mt-4">
@@ -2025,16 +2325,19 @@ export default function SlugPage() {
           </Button>
         </div>
       </Modal>
-      <Modal open={addOpen} onClose={() => setAddOpen(false)}>
-        <h2 className="text-lg font-semibold mb-2">Add New {slug ?? 'Item'}</h2>
-        <DynamicForm
-          data={getEmptyFormData()}
-          onSubmit={handleAddSave}
-          onCancel={() => setAddOpen(false)}
-          getConsistentFormTemplate={getConsistentFormTemplate}
-          isLoading={isAdding}
-        />
-      </Modal>
+      {/* Only show dynamic form modal for non-orders pages */}
+      {slug !== 'orders' && (
+        <Modal open={addOpen} onClose={() => setAddOpen(false)}>
+          <h2 className="text-lg font-semibold mb-2">Add New {slug ?? 'Item'}</h2>
+          <DynamicForm
+            data={getEmptyFormData()}
+            onSubmit={handleAddSave}
+            onCancel={() => setAddOpen(false)}
+            getConsistentFormTemplate={getConsistentFormTemplate}
+            isLoading={isAdding}
+          />
+        </Modal>
+      )}
       <Modal open={invoicePreview !== null} onClose={() => setInvoicePreview(null)}>
         <div className="w-full max-w-4xl">
           <div className="flex items-center justify-between mb-4">

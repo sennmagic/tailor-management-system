@@ -120,11 +120,7 @@ export function withAPIErrorAlert<TArgs extends any[], TResult>(
   showAlert: (msg: string) => void
 ): (...args: TArgs) => Promise<TResult | undefined> {
   return async (...args: TArgs) => {
-    try {
-      return await fn(...args);
-    } catch (err: any) {
-      showAlert(err?.message || "Unknown error");
-      return undefined;
-    }
+    const result = await fn(...args);
+    return result;
   };
 }

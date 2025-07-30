@@ -36,6 +36,15 @@ export function StatisticsChart({ slug, className = "" }: StatisticsChartProps) 
     // Determine the endpoint based on slug pattern
     let endpoint = slug;
     
+    // Special handling for endpoints that don't have stats
+    if (slug === 'catalogs' || slug === 'orders') {
+      // Skip statistics for these endpoints as they may not have stats endpoints
+      console.log(`⚠️ Skipping statistics for ${slug} - stats endpoint may not exist`);
+      setLoading(false);
+      setData([]);
+      return;
+    }
+    
     // If slug already contains 'stats', use it as is
     if (slug.includes('stats')) {
       endpoint = slug;
@@ -46,14 +55,22 @@ export function StatisticsChart({ slug, className = "" }: StatisticsChartProps) 
     
     console.log(`📊 Fetching statistics from endpoint: /${endpoint}`);
     setLoading(true);
+    setError(null); // Reset error state
+    
     fetchAPI({ endpoint, method: "GET" }).then(({ data, error }) => {
       if (error) {
         console.error(`❌ Error fetching from /${endpoint}:`, error);
         setError(error);
+        setData([]); // Reset data on error
       } else {
         console.log(`✅ Statistics data from /${endpoint}:`, data);
         setData(data || []);
       }
+      setLoading(false);
+    }).catch((err) => {
+      console.error(`❌ Unexpected error fetching from /${endpoint}:`, err);
+      setError('Failed to load statistics');
+      setData([]);
       setLoading(false);
     });
   }, [slug]);
@@ -297,20 +314,22 @@ export function StatisticsChart({ slug, className = "" }: StatisticsChartProps) 
     );
   }
 
-  return (
-    <div className={`space-y-6 ${className}`}>
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        {getSlugIcon()}
-        <div>
-          <h3 className="text-xl font-semibold text-gray-900">
-            {slug.charAt(0).toUpperCase() + slug.slice(1)} Statistics
-          </h3>
-          <p className="text-sm text-gray-500">
-            Overview of {slug} data and metrics
-          </p>
+  // Wrap the entire render in error boundary
+  try {
+    return (
+      <div className={`space-y-6 ${className}`}>
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          {getSlugIcon()}
+          <div>
+            <h3 className="text-xl font-semibold text-gray-900">
+              {slug.charAt(0).toUpperCase() + slug.slice(1)} Statistics
+            </h3>
+            <p className="text-sm text-gray-500">
+              Overview of {slug} data and metrics
+            </p>
+          </div>
         </div>
-      </div>
 
       {/* Top Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -480,5 +499,17 @@ export function StatisticsChart({ slug, className = "" }: StatisticsChartProps) 
         </div>
       )}
     </div>
-  );
+    );
+  } catch (err) {
+    console.error('Error rendering StatisticsChart:', err);
+    return (
+      <Card className={`${className}`}>
+        <CardContent className="p-6">
+          <div className="text-center text-red-500">
+            <p>Error rendering statistics chart</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 } 

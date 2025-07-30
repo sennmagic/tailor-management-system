@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { Alert } from "@/components/ui/alert";
+import { X } from "lucide-react";
 
 type AlertVariant = "success" | "destructive";
 
@@ -19,12 +20,12 @@ export function AlertProvider({ children }: { children: ReactNode }) {
     setAlert({ msg, variant });
   };
 
-  // Auto-dismiss success messages after 3 seconds
+  // Auto-dismiss all alerts after 5 seconds
   useEffect(() => {
-    if (alert?.variant === "success") {
+    if (alert) {
       const timer = setTimeout(() => {
         setAlert(null);
-      }, 3000);
+      }, 5000);
 
       return () => clearTimeout(timer);
     }
@@ -35,7 +36,17 @@ export function AlertProvider({ children }: { children: ReactNode }) {
       {children}
       {alert && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-md">
-          <Alert variant={alert.variant}>{alert.msg}</Alert>
+          <Alert variant={alert.variant} className="relative">
+            <div className="flex items-start justify-between">
+              <span className="flex-1">{alert.msg}</span>
+              <button
+                onClick={() => setAlert(null)}
+                className="ml-2 p-1 hover:bg-gray-100 rounded transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </Alert>
         </div>
       )}
     </AlertContext.Provider>

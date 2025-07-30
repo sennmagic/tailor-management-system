@@ -19,42 +19,38 @@ export default function LoginPage() {
     const username = formData.get("username");
     const password = formData.get("password");
 
-    try {
-      const { data, error } = await fetchAPI({
-        endpoint: "employees/login",
-        method: "POST",
-        data: { username, password },
-        revalidateSeconds: 0,
-      });
+    const { data, error } = await fetchAPI({
+      endpoint: "employees/login",
+      method: "POST",
+      data: { username, password },
+      revalidateSeconds: 0,
+    });
 
-      if (error) {
-        setError(error);
-        return;
-      }
-
-      if (data) {
-        console.log('Login successful:', data);
-        
-        // Check if tokens are in the response
-        if (data.tokens) {
-          // Set cookies manually if needed
-          if (data.tokens.access_token) {
-            document.cookie = `access_token=${data.tokens.access_token}; path=/; max-age=3600; secure; samesite=strict`;
-          }
-          if (data.tokens.refresh_token) {
-            document.cookie = `refresh_token=${data.tokens.refresh_token}; path=/; max-age=86400; secure; samesite=strict`;
-          }
-        }
-        
-        // Redirect to dashboard
-        router.push("/");
-      }
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Login failed";
-      setError(errorMessage);
-    } finally {
+    if (error) {
+      setError(error);
       setIsLoading(false);
+      return;
     }
+
+    if (data) {
+      console.log('Login successful:', data);
+      
+      // Check if tokens are in the response
+      if (data.tokens) {
+        // Set cookies manually if needed
+        if (data.tokens.access_token) {
+          document.cookie = `access_token=${data.tokens.access_token}; path=/; max-age=3600; secure; samesite=strict`;
+        }
+        if (data.tokens.refresh_token) {
+          document.cookie = `refresh_token=${data.tokens.refresh_token}; path=/; max-age=86400; secure; samesite=strict`;
+        }
+      }
+      
+      // Redirect to dashboard
+      router.push("/");
+    }
+    
+    setIsLoading(false);
   };
 
   return (
