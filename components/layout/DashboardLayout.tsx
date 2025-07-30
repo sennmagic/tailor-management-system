@@ -161,40 +161,46 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r px-6 py-6 hidden md:block">
-        <div className="mb-8">
-          <h1 className="text-xl font-bold text-green-600">Quick TMS</h1>
-          <p className="text-sm text-gray-500">Tailor Management System</p>
-        </div>
+             {/* Sidebar */}
+       <aside className="w-64 bg-white border-r px-6 py-6 hidden md:block">
+         <div className="mb-8">
+           <div className="flex items-center gap-3 mb-3">
+             <img 
+               src="/RPG-Logo-Green.png" 
+               alt="Rastriya Poshak Ghar Logo" 
+               className="h-10 w-auto"
+             />
+           </div>
+           <p className="text-sm text-gray-500">Tailor Management System</p>
+         </div>
 
-        <nav className="flex flex-col gap-4 text-sm">
-          {isLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="w-full h-6" />
-              <Skeleton className="w-full h-8" />
-              <Skeleton className="w-full h-8" />
-              <Skeleton className="w-full h-8" />
-            </div>
-          ) : sidebarData?.data ? (
-            renderMenuItems(sidebarData.data)
-          ) : (
-            <div className="space-y-4">
-              <LinkSection title="Navigation">
-                <SidebarLink href="/dashboard" icon={<Home className="w-4 h-4" />}>Dashboard</SidebarLink>
-                <SidebarLink href="/employees" icon={<Users className="w-4 h-4" />}>Staff Management</SidebarLink>
-                <SidebarLink href="/customers" icon={<User className="w-4 h-4" />}>Customers</SidebarLink>
-                <SidebarLink href="/appointments" icon={<Calendar className="w-4 h-4" />}>Appointments</SidebarLink>
-                <SidebarLink href="/vendors" icon={<Truck className="w-4 h-4" />}>Vendors</SidebarLink>
-                <SidebarLink href="/factories" icon={<Factory className="w-4 h-4" />}>Factories</SidebarLink>
-                <SidebarLink href="/catalogs" icon={<Package className="w-4 h-4" />}>Catalogs</SidebarLink>
-                <SidebarLink href="/orders" icon={<ShoppingCart className="w-4 h-4" />}>Orders</SidebarLink>
-                <SidebarLink href="/invoices" icon={<FileText className="w-4 h-4" />}>Invoices</SidebarLink>
-                <SidebarLink href="/expenses" icon={<DollarSign className="w-4 h-4" />}>Expenses</SidebarLink>
-              </LinkSection>
-            </div>
-          )}
-        </nav>
+                 <nav className="flex flex-col gap-2 text-sm overflow-y-auto max-h-[calc(100vh-200px)] scrollbar-hide">
+           {isLoading ? (
+             <div className="space-y-2">
+               <Skeleton className="w-full h-6" />
+               <Skeleton className="w-full h-8" />
+               <Skeleton className="w-full h-8" />
+               <Skeleton className="w-full h-8" />
+             </div>
+           ) : sidebarData?.data ? (
+             renderMenuItems(sidebarData.data)
+           ) : (
+             <div className="space-y-4">
+               <LinkSection title="Navigation">
+                 <SidebarLink href="/" icon={<Home className="w-5 h-5" />}>Dashboard</SidebarLink>
+                 <SidebarLink href="/employees" icon={<Users className="w-5 h-5" />}>Staff Management</SidebarLink>
+                 <SidebarLink href="/customers" icon={<User className="w-5 h-5" />}>Customers</SidebarLink>
+                 <SidebarLink href="/appointments" icon={<Calendar className="w-5 h-5" />}>Appointments</SidebarLink>
+                 <SidebarLink href="/vendors" icon={<Truck className="w-5 h-5" />}>Vendors</SidebarLink>
+                 <SidebarLink href="/factories" icon={<Factory className="w-5 h-5" />}>Factories</SidebarLink>
+                 <SidebarLink href="/catalogs" icon={<Package className="w-5 h-5" />}>Catalogs</SidebarLink>
+                 <SidebarLink href="/orders" icon={<ShoppingCart className="w-5 h-5" />}>Orders</SidebarLink>
+                 <SidebarLink href="/invoices" icon={<FileText className="w-5 h-5" />}>Invoices</SidebarLink>
+                 <SidebarLink href="/expenses" icon={<DollarSign className="w-5 h-5" />}>Expenses</SidebarLink>
+               </LinkSection>
+             </div>
+           )}
+         </nav>
       </aside>
 
       {/* Main Content */}
@@ -251,28 +257,30 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     </div>
   )
 
-  function SidebarLink({ href, children, icon }: { href: string; children: ReactNode; icon: ReactNode }) {
-    const isActive = pathname === href
-    
-    return (
-      <Link
-        href={href}
-        className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-          isActive ? 'bg-green-100 text-green-700' : 'text-gray-700 hover:text-green-600 hover:bg-green-50'
-        }`}
-      >
-        {icon}
-        {children}
-      </Link>
-    )
-  }
+     function SidebarLink({ href, children, icon }: { href: string; children: ReactNode; icon: ReactNode }) {
+     const isActive = pathname === href
+     
+     return (
+       <Link
+         href={href}
+                   className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all font-bold ${
+            isActive 
+              ? 'bg-primary text-white shadow-lg' 
+              : 'text-gray-700 hover:text-primary hover:bg-primary/10'
+          }`}
+       >
+         {icon}
+         {children}
+       </Link>
+     )
+   }
 
-  function LinkSection({ title, children }: { title: string; children: ReactNode }) {
-    return (
-      <div>
-        <p className="text-xs font-semibold text-gray-500 mb-1">{title}</p>
-        <div className="flex flex-col space-y-1">{children}</div>
-      </div>
-    )
-  }
+     function LinkSection({ title, children }: { title: string; children: ReactNode }) {
+     return (
+       <div>
+         <p className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">{title}</p>
+         <div className="flex flex-col space-y-2">{children}</div>
+       </div>
+     )
+   }
 }

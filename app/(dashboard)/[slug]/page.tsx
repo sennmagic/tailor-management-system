@@ -10,9 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbSeparator, BreadcrumbPage } from "@/components/ui/breadcrumb";
-import { StatisticsChart } from "@/components/ui/chart";
+
 import { OrderForm } from "@/components/ui/orderForm";
 import { OrderTable } from "@/components/ui/orderTable";
+
 import Link from "next/link";
 
 // Date picker components
@@ -546,7 +547,7 @@ function DynamicForm({
                         className="h-14 w-full text-xl px-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 border border-gray-300 rounded-md bg-white"
                       >
                         <option value="">Select Status</option>
-                        {getStatusOptions(subKey).map((status) => (
+                        {getStatusOptions(subKey).ermap((status) => (
                           <option key={status} value={status}>
                             {status.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                           </option>
@@ -1470,8 +1471,7 @@ export default function SlugPage() {
   const [invoicePreview, setInvoicePreview] = useState<{ url: string; customerId: string; statusData?: any } | null>(null);
   const [error, setError] = useState<string | null>(null);
   
-  // Status filtering for orders
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+
 
   useEffect(() => {
     if (!slug) return;
@@ -1485,16 +1485,10 @@ export default function SlugPage() {
     });
   }, [slug]);
 
-  // Filter orders by status
+  // Use apiResponse directly since we removed status filtering
   const filteredOrders = useMemo(() => {
-    if (slug !== 'orders' || statusFilter === 'all') {
-      return apiResponse;
-    }
-    return apiResponse.filter((order: any) => {
-      const orderStatus = order.orderStatus || order.status || '';
-      return orderStatus.toLowerCase() === statusFilter.toLowerCase();
-    });
-  }, [apiResponse, statusFilter, slug]);
+    return apiResponse;
+  }, [apiResponse]);
 
   const allKeys = useMemo(() => {
     let keys = apiResponse[0] ? Object.keys(apiResponse[0]).slice(0, 4) : [];
@@ -2004,10 +1998,7 @@ export default function SlugPage() {
         </BreadcrumbList>
       </Breadcrumb>
       
-      {/* Statistics Chart */}
-      <div className="mb-8">
-        <StatisticsChart slug={slug || ''} />
-      </div>
+
       
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">
@@ -2039,59 +2030,7 @@ export default function SlugPage() {
       )}
       
       {/* Status filter buttons for orders */}
-      {slug === 'orders' && !addOpen && (
-        <div className="mb-4 flex flex-wrap gap-2">
-          <Button
-            variant={statusFilter === 'all' ? 'default' : 'outline'}
-            onClick={() => setStatusFilter('all')}
-            className="text-sm"
-          >
-            All Orders
-          </Button>
-          <Button
-            variant={statusFilter === 'pending' ? 'default' : 'outline'}
-            onClick={() => setStatusFilter('pending')}
-            className="text-sm bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-          >
-            Pending
-          </Button>
-          <Button
-            variant={statusFilter === 'cutting' ? 'default' : 'outline'}
-            onClick={() => setStatusFilter('cutting')}
-            className="text-sm bg-blue-100 text-blue-800 hover:bg-blue-200"
-          >
-            Cutting
-          </Button>
-          <Button
-            variant={statusFilter === 'sewing' ? 'default' : 'outline'}
-            onClick={() => setStatusFilter('sewing')}
-            className="text-sm bg-purple-100 text-purple-800 hover:bg-purple-200"
-          >
-            Sewing
-          </Button>
-          <Button
-            variant={statusFilter === 'ready' ? 'default' : 'outline'}
-            onClick={() => setStatusFilter('ready')}
-            className="text-sm bg-green-100 text-green-800 hover:bg-green-200"
-          >
-            Ready
-          </Button>
-          <Button
-            variant={statusFilter === 'delivered' ? 'default' : 'outline'}
-            onClick={() => setStatusFilter('delivered')}
-            className="text-sm bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
-          >
-            Delivered
-          </Button>
-          <Button
-            variant={statusFilter === 'cancelled' ? 'default' : 'outline'}
-            onClick={() => setStatusFilter('cancelled')}
-            className="text-sm bg-red-100 text-red-800 hover:bg-red-200"
-          >
-            Cancelled
-          </Button>
-        </div>
-      )}
+
       
       {/* Use improved OrderTable for orders page, regular table for other pages */}
       {!addOpen && (
@@ -2134,7 +2073,7 @@ export default function SlugPage() {
             <div className="p-6 text-center text-red-500">{error}</div>
           ) : filteredOrders.length === 0 ? (
             <div className="p-6 text-center text-gray-500">
-              {statusFilter !== 'all' ? `No ${statusFilter} orders found.` : 'No data found.'}
+              No data found.
             </div>
           ) : (
             <Table>
