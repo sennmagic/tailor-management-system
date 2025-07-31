@@ -18,6 +18,7 @@ export function DynamicForm({
     isLoading?: boolean
   }) {
     const [formState, setFormState] = useState<Record<string, unknown>>(data || {});
+    const [initialData, setInitialData] = useState<Record<string, unknown>>(data || {});
     
     // Use the lookup hook instead of duplicating functions
     const {
@@ -43,12 +44,30 @@ export function DynamicForm({
       analyzeFormStructure(data);
     }, [data, analyzeFormStructure]);
 
-    // Update form state when data changes
+    // Update form state when data changes, but preserve user input
     useEffect(() => {
       if (data) {
-        setFormState(data);
+        // Check if this is a completely new form (different initial data)
+        const isNewForm = JSON.stringify(initialData) !== JSON.stringify(data);
+        
+        if (isNewForm) {
+          // This is a new form, reset everything
+          setInitialData(data);
+          setFormState(data);
+        } else {
+          // Same form, preserve user input
+          setFormState(prev => {
+            // If form is empty, initialize with data
+            if (!prev || Object.keys(prev).length === 0) {
+              return data;
+            }
+            
+            // Preserve existing form state
+            return prev;
+          });
+        }
       }
-    }, [data]);
+    }, [data, initialData]);
 
     // Handle form field changes with deep object support
     function handleFieldChange(fieldPath: string, newValue: any) {
@@ -712,6 +731,11 @@ export function DynamicForm({
       
       console.log('Submitting cleaned form state:', cleanedFormState);
       onSubmit(cleanedFormState);
+    }
+
+    // Reset form to initial state
+    function resetForm() {
+      setFormState(initialData);
     }
 
          return (

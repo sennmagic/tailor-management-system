@@ -622,7 +622,6 @@ export default function SlugPage() {
           // Refresh data after creation
           const { data: refreshData } = await fetchAPI({ endpoint: endpointSlug, method: "GET" });
           setApiResponse(extractDataArray(refreshData));
-          setAddOpen(false);
           showAlert("Created successfully!", "success");
           break;
 
@@ -630,7 +629,6 @@ export default function SlugPage() {
           // Refresh data after update
           const { data: updateRefreshData } = await fetchAPI({ endpoint: endpointSlug, method: "GET" });
           setApiResponse(extractDataArray(updateRefreshData));
-          setEditIdx(null);
           showAlert("Update successful!", "success");
           break;
 
@@ -1014,7 +1012,12 @@ export default function SlugPage() {
           {editIdx !== null && (
             <DynamicForm
               data={apiResponse[editIdx]}
-                             onSubmit={(values) => handleApiOperation('update', values, { idx: editIdx! })}
+              onSubmit={async (values) => {
+                const result = await handleApiOperation('update', values, { idx: editIdx! });
+                if (result.success) {
+                  setEditIdx(null);
+                }
+              }}
               onCancel={() => setEditIdx(null)}
               isLoading={isEditing}
             />
@@ -1052,7 +1055,12 @@ export default function SlugPage() {
         <Modal open={addOpen} onClose={() => setAddOpen(false)} isFullScreen={true}>
           <DynamicForm
             data={getEmptyFormData(apiResponse, allKeys)}
-                         onSubmit={(values) => handleApiOperation('create', values)}
+            onSubmit={async (values) => {
+              const result = await handleApiOperation('create', values);
+              if (result.success) {
+                setAddOpen(false);
+              }
+            }}
             onCancel={() => setAddOpen(false)}
             isLoading={isAdding}
           />
