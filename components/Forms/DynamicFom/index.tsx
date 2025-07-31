@@ -10,13 +10,11 @@ export function DynamicForm({
     data, 
     onSubmit, 
     onCancel, 
-    getConsistentFormTemplate,
     isLoading = false
   }: { 
     data: Record<string, unknown>, 
     onSubmit: (values: Record<string, unknown>) => void, 
     onCancel: () => void,
-    getConsistentFormTemplate: () => any,
     isLoading?: boolean
   }) {
     const [formState, setFormState] = useState<Record<string, unknown>>(data || {});
@@ -28,10 +26,15 @@ export function DynamicForm({
       detectFieldType,
       getStatusOptions,
       formatFieldName,
+      formatValue,
+      formatStatusValue,
       shouldDisplayField,
       analyzeFormStructure,
       fetchLookupOptions,
-      resetLookups
+      resetLookups,
+      filterSubmitFields,
+      getEmptyFormData,
+      renderCellValue
     } = useLookup({ data });
 
     // Initialize form analysis
@@ -350,7 +353,7 @@ export function DynamicForm({
             <div className="w-3 h-3 bg-secondary rounded-full"></div>
             <h3 className="text-lg font-semibold text-gray-800">
               {formatFieldName(key)}
-              <span className="text-xs text-secondary ml-2">📦 Object Field</span>
+              <span className="text-xs text-secondary ml-2">�� Object Field</span>
             </h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -366,29 +369,42 @@ export function DynamicForm({
     function renderArrayField(key: string, arr: any[], fieldPath: string, config: any): React.ReactNode {
       const currentArray = getFieldValue(fieldPath) as any[] || [];
       
+      // Enhanced template detection for empty arrays
+      const inferTemplateFromFieldName = (fieldName: string) => {
+        const lowerFieldName = fieldName.toLowerCase();
+        
+        // Common patterns for array fields
+        if (lowerFieldName.includes('date') || lowerFieldName.includes('special')) {
+          return { label: '', date: '' };
+        }
+        if (lowerFieldName.includes('contact') || lowerFieldName.includes('phone')) {
+          return { label: '', value: '' };
+        }
+        if (lowerFieldName.includes('address')) {
+          return { type: '', value: '' };
+        }
+        if (lowerFieldName.includes('social') || lowerFieldName.includes('link')) {
+          return { platform: '', url: '' };
+        }
+        if (lowerFieldName.includes('tag') || lowerFieldName.includes('category')) {
+          return { name: '', value: '' };
+        }
+        
+        // Default pattern for key-value pairs
+        return { label: '', value: '' };
+      };
+      
       const addItem = () => {
         let newItem;
-        if (config.isComplexArray && config.itemTemplate) {
-          // Create a proper template item with all fields initialized
-          newItem = {};
-          Object.entries(config.itemTemplate).forEach(([key, value]) => {
-            if (typeof value === 'string') {
-              newItem[key] = '';
-            } else if (typeof value === 'number') {
-              newItem[key] = 0;
-            } else if (typeof value === 'boolean') {
-              newItem[key] = false;
-            } else if (Array.isArray(value)) {
-              newItem[key] = [];
-            } else if (typeof value === 'object' && value !== null) {
-              newItem[key] = {};
-            } else {
-              newItem[key] = '';
-            }
-          });
+        if (config.isComplexArray && config.itemTemplate && Object.keys(config.itemTemplate).length > 0) {
+          // Use the getEmptyFormData function from useLookup to create proper empty template
+          newItem = getEmptyFormData([config.itemTemplate], Object.keys(config.itemTemplate));
+        } else if (currentArray.length > 0 && currentArray[0]) {
+          // Use the first existing item as template
+          newItem = getEmptyFormData([currentArray[0]], Object.keys(currentArray[0]));
         } else {
-          // For simple arrays, create an empty object instead of empty string
-          newItem = {};
+          // Infer template from field name
+          newItem = inferTemplateFromFieldName(key);
         }
         handleFieldChange(fieldPath, [...currentArray, newItem]);
       };
@@ -403,6 +419,52 @@ export function DynamicForm({
         newArray[index] = itemValue;
         handleFieldChange(fieldPath, newArray);
       };
+
+      // Get the template for array items with enhanced fallback logic
+      let itemTemplate = config.itemTemplate;
+      let templateKeys = Object.keys(itemTemplate || {});
+      
+      // If template is empty but we have items, use the first item's structure
+      if (templateKeys.length === 0 && currentArray.length > 0 && currentArray[0]) {
+        itemTemplate = currentArray[0];
+        templateKeys = Object.keys(currentArray[0]);
+      }
+      
+      // If still no template, infer from field name
+      if (templateKeys.length === 0) {
+        itemTemplate = inferTemplateFromFieldName(key);
+        templateKeys = Object.keys(itemTemplate);
+      }
+
+      // Debug logging
+      console.log('🔍 Array Field Debug:', {
+        key,
+        fieldPath,
+        config,
+        itemTemplate,
+        templateKeys,
+        currentArray,
+        isComplexArray: config.isComplexArray
+      });
+
+      // Check if this is a simple key-value structure (like label-value pairs or label-date pairs)
+      let isSimpleKeyValue = templateKeys.length === 2 && 
+        (templateKeys.includes('label') && (templateKeys.includes('value') || templateKeys.includes('date')) ||
+         templateKeys.includes('key') && templateKeys.includes('value') ||
+         templateKeys.includes('name') && templateKeys.includes('value') ||
+         templateKeys.includes('platform') && templateKeys.includes('url') ||
+         templateKeys.includes('type') && templateKeys.includes('value'));
+
+      // Fallback: If no template but we have existing items, try to detect from the first item
+      if (!isSimpleKeyValue && currentArray.length > 0 && currentArray[0]) {
+        const firstItemKeys = Object.keys(currentArray[0]);
+        isSimpleKeyValue = firstItemKeys.length === 2 && 
+          (firstItemKeys.includes('label') && (firstItemKeys.includes('value') || firstItemKeys.includes('date')) ||
+           firstItemKeys.includes('key') && firstItemKeys.includes('value') ||
+           firstItemKeys.includes('name') && firstItemKeys.includes('value') ||
+           firstItemKeys.includes('platform') && firstItemKeys.includes('url') ||
+           firstItemKeys.includes('type') && firstItemKeys.includes('value'));
+      }
 
       return (
         <div key={fieldPath} className="space-y-4 p-6 border border-gray-200 rounded-lg bg-gray-50">
@@ -426,14 +488,30 @@ export function DynamicForm({
 
           {currentArray.length === 0 ? (
             <div className="text-center py-6 text-gray-500">
-              No items. Click "Add Item" to start.
+              {templateKeys.length > 0 ? (
+                <div>
+                  <p>No items yet. Click "Add Item" to create a new {formatFieldName(key)} entry.</p>
+                  {isSimpleKeyValue && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      Expected format: {templateKeys.join(' + ')}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p>No items. Click "Add Item" to start.</p>
+              )}
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {currentArray.map((item, index) => (
-                <div key={index} className="p-3 bg-white border border-gray-200 rounded-md">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-600">Item {index + 1}</span>
+                <div key={index} className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <span className="text-sm font-medium text-gray-700">
+                        {formatFieldName(key)} #{index + 1}
+                      </span>
+                    </div>
                     <Button
                       type="button"
                       onClick={() => removeItem(index)}
@@ -445,28 +523,133 @@ export function DynamicForm({
                   </div>
                   
                   {config.isComplexArray ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {/* Always render fields from template if available, otherwise from item */}
-                      {config.itemTemplate ? (
-                        Object.entries(config.itemTemplate).map(([subKey, subValue]) => 
-                          renderField(subKey, subValue, `${fieldPath}[${index}].${subKey}`)
-                        )
-                      ) : (item && typeof item === 'object' && Object.keys(item).length > 0) ? (
-                        Object.entries(item).map(([subKey, subValue]) => 
-                          renderField(subKey, subValue, `${fieldPath}[${index}].${subKey}`)
-                        )
-                      ) : (
-                        <div className="col-span-full text-gray-500">
-                          No template available for this array item
+                    isSimpleKeyValue ? (
+                      // Simple key-value layout for label-value pairs or label-date pairs
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Label
+                          </label>
+                          <Input
+                            type="text"
+                            value={getFieldValue(`${fieldPath}[${index}].label`) || getFieldValue(`${fieldPath}[${index}].key`) || getFieldValue(`${fieldPath}[${index}].name`) || ''}
+                            onChange={(e) => {
+                              const labelKey = templateKeys.find(k => k === 'label' || k === 'key' || k === 'name');
+                              if (labelKey) {
+                                handleFieldChange(`${fieldPath}[${index}].${labelKey}`, e.target.value);
+                              }
+                            }}
+                            className="h-10 w-full text-sm"
+                            placeholder="Enter label"
+                          />
                         </div>
-                      )}
-                    </div>
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-gray-700">
+                            {templateKeys.includes('date') ? 'Date' : 'Value'}
+                          </label>
+                          {templateKeys.includes('date') ? (
+                            <Input
+                              type="date"
+                              value={getFieldValue(`${fieldPath}[${index}].date`) ? String(getFieldValue(`${fieldPath}[${index}].date`)).split('T')[0] : ''}
+                              onChange={(e) => handleFieldChange(`${fieldPath}[${index}].date`, e.target.value)}
+                              className="h-10 w-full text-sm"
+                            />
+                          ) : (
+                            <Input
+                              type="text"
+                              value={getFieldValue(`${fieldPath}[${index}].value`) || ''}
+                              onChange={(e) => handleFieldChange(`${fieldPath}[${index}].value`, e.target.value)}
+                              className="h-10 w-full text-sm"
+                              placeholder="Enter value"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      // Complex layout for other structures
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {/* Render fields based on template or existing item structure */}
+                        {templateKeys.length > 0 ? (
+                          templateKeys.map((subKey) => {
+                            const subValue = itemTemplate[subKey];
+                            const fieldType = detectFieldType(subKey, subValue, `${fieldPath}[${index}]`);
+                            
+                            // Skip internal fields
+                            if (!shouldDisplayField(subKey, subValue)) {
+                              return null;
+                            }
+
+                            return (
+                              <div key={subKey} className="space-y-2">
+                                <label className="block text-sm font-medium text-gray-700">
+                                  {formatFieldName(subKey)}
+                                </label>
+                                
+                                {/* Render appropriate input based on field type */}
+                                {fieldType.type === 'date' ? (
+                                  <Input
+                                    type="date"
+                                    value={getFieldValue(`${fieldPath}[${index}].${subKey}`) ? String(getFieldValue(`${fieldPath}[${index}].${subKey}`)).split('T')[0] : ''}
+                                    onChange={(e) => handleFieldChange(`${fieldPath}[${index}].${subKey}`, e.target.value)}
+                                    className="h-10 w-full text-sm"
+                                  />
+                                ) : fieldType.type === 'lookup' ? (
+                                  <select
+                                    value={getFieldValue(`${fieldPath}[${index}].${subKey}`) || ''}
+                                    onChange={(e) => handleFieldChange(`${fieldPath}[${index}].${subKey}`, e.target.value)}
+                                    className="h-10 w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  >
+                                    <option value="">Select {formatFieldName(subKey)}</option>
+                                    {/* Add common options for special dates */}
+                                    {subKey === 'label' && [
+                                      'Birthday', 'Anniversary', 'Wedding', 'Graduation', 
+                                      'Holiday', 'Meeting', 'Appointment', 'Other'
+                                    ].map(option => (
+                                      <option key={option} value={option}>{option}</option>
+                                    ))}
+                                  </select>
+                                ) : fieldType.type === 'boolean' ? (
+                                  <div className="flex items-center space-x-2">
+                                    <Checkbox
+                                      checked={Boolean(getFieldValue(`${fieldPath}[${index}].${subKey}`))}
+                                      onCheckedChange={(checked) => handleFieldChange(`${fieldPath}[${index}].${subKey}`, checked)}
+                                    />
+                                    <span className="text-sm text-gray-600">Yes</span>
+                                  </div>
+                                ) : fieldType.type === 'number' ? (
+                                  <Input
+                                    type="number"
+                                    value={getFieldValue(`${fieldPath}[${index}].${subKey}`) || ''}
+                                    onChange={(e) => handleFieldChange(`${fieldPath}[${index}].${subKey}`, parseFloat(e.target.value) || 0)}
+                                    className="h-10 w-full text-sm"
+                                    placeholder={`Enter ${formatFieldName(subKey)}`}
+                                  />
+                                ) : (
+                                  <Input
+                                    type="text"
+                                    value={getFieldValue(`${fieldPath}[${index}].${subKey}`) || ''}
+                                    onChange={(e) => handleFieldChange(`${fieldPath}[${index}].${subKey}`, e.target.value)}
+                                    className="h-10 w-full text-sm"
+                                    placeholder={`Enter ${formatFieldName(subKey)}`}
+                                  />
+                                )}
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="col-span-full text-gray-500 text-center py-4">
+                            No template available for this array item
+                          </div>
+                        )}
+                      </div>
+                    )
                   ) : (
                     <Input
                       type="text"
                       value={item || ''}
                       onChange={(e) => updateItem(index, e.target.value)}
                       placeholder={`Enter ${formatFieldName(key)} item`}
+                      className="h-10 w-full"
                     />
                   )}
                 </div>
@@ -524,38 +707,18 @@ export function DynamicForm({
     function handleSubmit(e: React.FormEvent) {
       e.preventDefault();
       
-      // Clean up the form state before submission
-      const cleanedFormState = { ...formState };
-      
-      // Ensure arrays contain proper objects
-      Object.keys(cleanedFormState).forEach(key => {
-        const value = cleanedFormState[key];
-        if (Array.isArray(value)) {
-          // Clean up array items to ensure they are proper objects
-          cleanedFormState[key] = value.map(item => {
-            if (item && typeof item === 'object' && !Array.isArray(item)) {
-              // If it's already an object, return it as is
-              return item;
-            } else if (item === null || item === undefined) {
-              // If it's null/undefined, return empty object
-              return {};
-            } else {
-              // If it's a primitive value, wrap it in an object
-              return { value: item };
-            }
-          });
-        }
-      });
+      // Use the filterSubmitFields function from useLookup hook
+      const cleanedFormState = filterSubmitFields(formState);
       
       console.log('Submitting cleaned form state:', cleanedFormState);
       onSubmit(cleanedFormState);
     }
 
-    return (
-      <form
-        onSubmit={handleSubmit}
-        className="fixed inset-0 z-50 w-screen h-screen bg-white p-0 m-0 flex flex-col overflow-auto"
-      >
+         return (
+       <form
+         onSubmit={handleSubmit}
+         className="w-full h-full bg-white p-0 m-0 flex flex-col overflow-auto"
+       >
         <div className="mb-6 px-6 pt-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
             {Object.keys(formState).some(k => formState[k] && typeof formState[k] === 'object' && (formState[k] as any)._id) 

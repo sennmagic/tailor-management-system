@@ -23,11 +23,20 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-function Modal({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
+function Modal({ open, onClose, children, isFullScreen = false }: { open: boolean; onClose: () => void; children: React.ReactNode; isFullScreen?: boolean }) {
   if (!open) return null;
+  
+  if (isFullScreen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/40">
+        {children}
+      </div>
+    );
+  }
+  
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className=" rounded shadow-lg max-w-lg w-full p-6 relative">
+      <div className="rounded shadow-lg max-w-lg w-full p-6 relative">
         <button onClick={onClose} className="absolute top-2 right-2 text-gray-500 hover:text-black text-xl">&times;</button>
         {children}
       </div>
@@ -416,7 +425,6 @@ export default function SlugPage() {
     shouldDisplayField,
     renderCellValue,
     filterSubmitFields,
-    getConsistentFormTemplate,
     getEmptyFormData
   } = useLookup({ data: apiResponse });
   
@@ -1002,14 +1010,12 @@ export default function SlugPage() {
           )}
         </Modal>
       ) : (
-        <Modal open={editIdx !== null} onClose={() => setEditIdx(null)}>
-          <h2 className="text-lg font-semibold mb-2">Edit Row</h2>
+        <Modal open={editIdx !== null} onClose={() => setEditIdx(null)} isFullScreen={true}>
           {editIdx !== null && (
             <DynamicForm
               data={apiResponse[editIdx]}
                              onSubmit={(values) => handleApiOperation('update', values, { idx: editIdx! })}
               onCancel={() => setEditIdx(null)}
-              getConsistentFormTemplate={() => getConsistentFormTemplate(apiResponse)}
               isLoading={isEditing}
             />
           )}
@@ -1043,13 +1049,11 @@ export default function SlugPage() {
       </Modal>
       {/* Only show dynamic form modal for non-orders pages */}
       {slug !== 'orders' && (
-        <Modal open={addOpen} onClose={() => setAddOpen(false)}>
-          <h2 className="text-lg font-semibold mb-2">Add New {slug ?? 'Item'}</h2>
+        <Modal open={addOpen} onClose={() => setAddOpen(false)} isFullScreen={true}>
           <DynamicForm
             data={getEmptyFormData(apiResponse, allKeys)}
                          onSubmit={(values) => handleApiOperation('create', values)}
             onCancel={() => setAddOpen(false)}
-            getConsistentFormTemplate={() => getConsistentFormTemplate(apiResponse)}
             isLoading={isAdding}
           />
         </Modal>
@@ -1131,8 +1135,7 @@ export default function SlugPage() {
           )}
         </div>
       </Modal>
-      <Modal open={testFormOpen} onClose={() => setTestFormOpen(false)}>
-        <h2 className="text-lg font-semibold mb-2">Test DynamicForm</h2>
+      <Modal open={testFormOpen} onClose={() => setTestFormOpen(false)} isFullScreen={true}>
         <DynamicForm
           data={testFormData}
           onSubmit={(values) => {
@@ -1140,20 +1143,6 @@ export default function SlugPage() {
             setTestFormOpen(false);
           }}
           onCancel={() => setTestFormOpen(false)}
-          getConsistentFormTemplate={() => ({
-            name: "Test Item",
-            status: "pending",
-            customerId: "123",
-            amount: 100,
-            isActive: true,
-            createdAt: "2024-01-01",
-            description: "This is a test item",
-            tags: ["test", "demo"],
-            metadata: {
-              category: "test",
-              priority: "high"
-            }
-          })}
           isLoading={false}
         />
       </Modal>

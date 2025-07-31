@@ -191,7 +191,7 @@ export function useLookup({
       const entityName = key.replace(/Id$/i, '');
       
       // Only treat as lookup if it's a known entity with a valid endpoint
-      const knownEntities = ['customer', 'factory', 'measurement', 'catalog', 'vendor', 'label'];
+      const knownEntities = ['customers', 'factory', 'measurement', 'catalog', 'vendor', 'label'];
       if (knownEntities.includes(entityName.toLowerCase())) {
         return {
           type: 'lookup',
@@ -779,7 +779,7 @@ export function useLookup({
       return "-";
     },
     filterSubmitFields: (values: Record<string, unknown>) => {
-      const SKIP_FIELDS = ["updatedAt", "createdAt", "__v", "_id", "isDeleted"];
+      const SKIP_FIELDS = ["updatedAt", "createdAt", "__v", "_id", "Is Deleted"];
       const filtered: Record<string, unknown> = {};
       Object.entries(values).forEach(([k, v]) => {
         if (!SKIP_FIELDS.includes(k)) filtered[k] = v;
