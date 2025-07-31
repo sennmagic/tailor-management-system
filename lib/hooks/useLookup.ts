@@ -419,6 +419,11 @@ export function useLookup({
         arrayFieldName = pathParts[pathParts.length - 2];
       }
       
+      console.log(`🔍 Array item lookup for ${fieldPath}:`);
+      console.log(`   - Extracted array field name: ${arrayFieldName}`);
+      console.log(`   - Entity name: ${config.entityName}`);
+      console.log(`   - Data structure:`, data);
+      
       if (data && typeof data === 'object') {
         // Navigate to the array field
         let arrayData: any[] = [];
@@ -654,9 +659,56 @@ export function useLookup({
         analyzeFormStructure(value, fieldPath);
       }
       
-      if (fieldType.type === 'array' && Array.isArray(value) && value.length > 0) {
-        if (typeof value[0] === 'object') {
+      if (fieldType.type === 'array' && Array.isArray(value)) {
+        console.log(`🔍 Analyzing array field: ${fieldPath}`);
+        console.log(`   - Array length: ${value.length}`);
+        
+        if (value.length > 0 && typeof value[0] === 'object') {
+          console.log(`   - Array item structure:`, value[0]);
+          
+          // Analyze the first array item to detect lookup fields within array items
           analyzeFormStructure(value[0], `${fieldPath}[0]`);
+          
+          // Also analyze the array field itself to detect array-level lookups
+          const arrayFieldType = detectFieldType(key, value, parentPath);
+          console.log(`   - Array field type:`, arrayFieldType);
+          
+          if (arrayFieldType.config?.hasLookupFields && arrayFieldType.config.lookupFields) {
+            console.log(`   - Detected lookup fields in array:`, arrayFieldType.config.lookupFields);
+            // For each detected lookup field in the array, create lookup options
+            arrayFieldType.config.lookupFields.forEach((lookupField: string) => {
+              const lookupFieldPath = `${fieldPath}[0].${lookupField}`;
+              const lookupFieldType = detectFieldType(lookupField, value[0][lookupField], `${fieldPath}[0]`);
+              console.log(`   - Lookup field ${lookupField}:`, lookupFieldType);
+              if (lookupFieldType.type === 'lookup' && lookupFieldType.config) {
+                console.log(`   - Fetching lookup options for: ${lookupFieldPath}`);
+                fetchLookupOptions(lookupFieldPath, lookupFieldType.config);
+              }
+            });
+          }
+        } else if (value.length === 0) {
+          // Handle empty arrays - analyze the array field type to detect potential lookup fields
+          const arrayFieldType = detectFieldType(key, value, parentPath);
+          console.log(`   - Empty array field type:`, arrayFieldType);
+          
+          // For empty arrays, we need to check if this array field name suggests it might contain lookup fields
+          const lowerKey = key.toLowerCase();
+          if (lowerKey.includes('dates') || lowerKey.includes('events') || lowerKey.includes('items')) {
+            // These array types commonly contain lookup fields like 'label'
+            console.log(`   - Detected potential lookup array: ${key}`);
+            
+            // Create lookup options for common fields that might appear in this array type
+            const commonLookupFields = ['label', 'type', 'category'];
+            commonLookupFields.forEach((lookupField) => {
+              const lookupFieldPath = `${fieldPath}[0].${lookupField}`;
+              const lookupFieldType = detectFieldType(lookupField, '', `${fieldPath}[0]`);
+              console.log(`   - Potential lookup field ${lookupField}:`, lookupFieldType);
+              if (lookupFieldType.type === 'lookup' && lookupFieldType.config) {
+                console.log(`   - Fetching lookup options for: ${lookupFieldPath}`);
+                fetchLookupOptions(lookupFieldPath, lookupFieldType.config);
+              }
+            });
+          }
         }
       }
     });

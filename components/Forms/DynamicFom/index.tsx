@@ -19,7 +19,7 @@ export function DynamicForm({
     getConsistentFormTemplate: () => any,
     isLoading?: boolean
   }) {
-    const [formState, setFormState] = useState<Record<string, unknown>>(data);
+    const [formState, setFormState] = useState<Record<string, unknown>>(data || {});
     
     // Use the lookup hook instead of duplicating functions
     const {
@@ -40,6 +40,13 @@ export function DynamicForm({
       analyzeFormStructure(data);
     }, [data, analyzeFormStructure]);
 
+    // Update form state when data changes
+    useEffect(() => {
+      if (data) {
+        setFormState(data);
+      }
+    }, [data]);
+
     // Handle form field changes with deep object support
     function handleFieldChange(fieldPath: string, newValue: any) {
       setFormState(prev => {
@@ -49,13 +56,57 @@ export function DynamicForm({
         let current: any = newState;
         for (let i = 0; i < pathParts.length - 1; i++) {
           const part = pathParts[i];
-          if (!(part in current)) {
-            current[part] = {};
+          
+          // Handle array indices like specialDates[0]
+          const arrayMatch = part.match(/^(\w+)\[(\d+)\]$/);
+          if (arrayMatch) {
+            const arrayName = arrayMatch[1];
+            const arrayIndex = parseInt(arrayMatch[2]);
+            
+            if (!(arrayName in current)) {
+              current[arrayName] = [];
+            }
+            if (!Array.isArray(current[arrayName])) {
+              current[arrayName] = [];
+            }
+            
+            // Ensure array has enough elements
+            while (current[arrayName].length <= arrayIndex) {
+              current[arrayName].push({});
+            }
+            
+            current = current[arrayName][arrayIndex];
+          } else {
+            if (!(part in current)) {
+              current[part] = {};
+            }
+            current = current[part];
           }
-          current = current[part];
         }
         
-        current[pathParts[pathParts.length - 1]] = newValue;
+        const lastPart = pathParts[pathParts.length - 1];
+        const arrayMatch = lastPart.match(/^(\w+)\[(\d+)\]$/);
+        if (arrayMatch) {
+          const arrayName = arrayMatch[1];
+          const arrayIndex = parseInt(arrayMatch[2]);
+          
+          if (!(arrayName in current)) {
+            current[arrayName] = [];
+          }
+          if (!Array.isArray(current[arrayName])) {
+            current[arrayName] = [];
+          }
+          
+          // Ensure array has enough elements
+          while (current[arrayName].length <= arrayIndex) {
+            current[arrayName].push({});
+          }
+          
+          current[arrayName][arrayIndex] = newValue;
+        } else {
+          current[lastPart] = newValue;
+        }
+        
         return newState;
       });
     }
@@ -66,8 +117,28 @@ export function DynamicForm({
       let current = formState;
       
       for (const part of pathParts) {
-        if (current && typeof current === 'object' && part in current) {
-          current = (current as any)[part];
+        if (current && typeof current === 'object') {
+          // Handle array indices like specialDates[0]
+          const arrayMatch = part.match(/^(\w+)\[(\d+)\]$/);
+          if (arrayMatch) {
+            const arrayName = arrayMatch[1];
+            const arrayIndex = parseInt(arrayMatch[2]);
+            
+            if (arrayName in current && Array.isArray((current as any)[arrayName])) {
+              const array = (current as any)[arrayName];
+              if (arrayIndex >= 0 && arrayIndex < array.length) {
+                current = array[arrayIndex];
+              } else {
+                return '';
+              }
+            } else {
+              return '';
+            }
+          } else if (part in current) {
+            current = (current as any)[part];
+          } else {
+            return '';
+          }
         } else {
           return '';
         }
@@ -316,7 +387,8 @@ export function DynamicForm({
             }
           });
         } else {
-          newItem = '';
+          // For simple arrays, create an empty object instead of empty string
+          newItem = {};
         }
         handleFieldChange(fieldPath, [...currentArray, newItem]);
       };
@@ -374,13 +446,13 @@ export function DynamicForm({
                   
                   {config.isComplexArray ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {/* Render fields from the item or template */}
-                      {(item && typeof item === 'object' && Object.keys(item).length > 0) ? (
-                        Object.entries(item).map(([subKey, subValue]) => 
+                      {/* Always render fields from template if available, otherwise from item */}
+                      {config.itemTemplate ? (
+                        Object.entries(config.itemTemplate).map(([subKey, subValue]) => 
                           renderField(subKey, subValue, `${fieldPath}[${index}].${subKey}`)
                         )
-                      ) : config.itemTemplate ? (
-                        Object.entries(config.itemTemplate).map(([subKey, subValue]) => 
+                      ) : (item && typeof item === 'object' && Object.keys(item).length > 0) ? (
+                        Object.entries(item).map(([subKey, subValue]) => 
                           renderField(subKey, subValue, `${fieldPath}[${index}].${subKey}`)
                         )
                       ) : (
@@ -451,7 +523,32 @@ export function DynamicForm({
 
     function handleSubmit(e: React.FormEvent) {
       e.preventDefault();
-      onSubmit(formState);
+      
+      // Clean up the form state before submission
+      const cleanedFormState = { ...formState };
+      
+      // Ensure arrays contain proper objects
+      Object.keys(cleanedFormState).forEach(key => {
+        const value = cleanedFormState[key];
+        if (Array.isArray(value)) {
+          // Clean up array items to ensure they are proper objects
+          cleanedFormState[key] = value.map(item => {
+            if (item && typeof item === 'object' && !Array.isArray(item)) {
+              // If it's already an object, return it as is
+              return item;
+            } else if (item === null || item === undefined) {
+              // If it's null/undefined, return empty object
+              return {};
+            } else {
+              // If it's a primitive value, wrap it in an object
+              return { value: item };
+            }
+          });
+        }
+      });
+      
+      console.log('Submitting cleaned form state:', cleanedFormState);
+      onSubmit(cleanedFormState);
     }
 
     return (
