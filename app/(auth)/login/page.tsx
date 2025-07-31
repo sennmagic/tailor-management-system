@@ -85,7 +85,7 @@ export default function LoginPage() {
                   </div>
                   <div className="text-left">
                     <h1 className="text-3xl font-bold text-white mb-2">RASTRIYA POSHAK</h1>
-                    <p className="text-sm text-white/80 font-medium">National Postal Service</p>
+                    <p className="text-sm text-white/80 font-medium"></p>
                   </div>
                 </div>
               </div>
@@ -94,7 +94,7 @@ export default function LoginPage() {
               <div className="text-center max-w-md mb-8">
                 <h2 className="text-3xl font-bold mb-4">Welcome Back</h2>
                 <p className="text-lg text-white/90 leading-relaxed">
-                  Access your postal management system and streamline your operations
+                  Access your Tailoring management system and streamline your operations
                 </p>
               </div>
 
@@ -102,7 +102,7 @@ export default function LoginPage() {
               <div className="space-y-3 w-full max-w-md mb-8">
                 <div className="flex items-center gap-3 text-white/90">
                   <CheckCircle className="w-4 h-4 text-white/70" />
-                  <span className="text-sm">Manage postal services and packages</span>
+                  <span className="text-sm">Manage Tailoring services and packages</span>
                 </div>
                 <div className="flex items-center gap-3 text-white/90">
                   <CheckCircle className="w-4 h-4 text-white/70" />
@@ -120,7 +120,7 @@ export default function LoginPage() {
                   <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center mx-auto mb-2">
                     <MapPin className="w-4 h-4 text-white" />
                   </div>
-                  <h3 className="text-xs font-semibold text-white/90">Postal Services</h3>
+                  <h3 className="text-xs font-semibold text-white/90">Tailoring Services</h3>
                 </div>
                 
                 <div className="text-center p-3 rounded-xl bg-white/10 backdrop-blur-sm">
@@ -159,7 +159,7 @@ export default function LoginPage() {
                   </div>
                   <div>
                     <h1 className="text-xl font-bold text-foreground mb-1">RASTRIYA POSHAK</h1>
-                    <p className="text-muted-foreground text-sm">National Postal Service</p>
+                    <p className="text-muted-foreground text-sm">National Tailoring Service</p>
                   </div>
                 </div>
               </div>
