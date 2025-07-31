@@ -28,7 +28,10 @@ export function DynamicForm({
       detectFieldType,
       getStatusOptions,
       formatFieldName,
-      analyzeFormStructure
+      shouldDisplayField,
+      analyzeFormStructure,
+      fetchLookupOptions,
+      resetLookups
     } = useLookup({ data });
 
     // Initialize form analysis
@@ -78,8 +81,8 @@ export function DynamicForm({
       const fieldType = detectFieldType(key, value, fieldPath.split('.').slice(0, -1).join('.'));
       const currentValue = getFieldValue(fieldPath);
       
-      // Skip internal fields
-      if (key === '_id' || key === '__v' || key === 'createdAt' || key === 'updatedAt') {
+      // Skip fields that shouldn't be displayed (including "is" fields)
+      if (!shouldDisplayField(key, value)) {
         return null;
       }
 
@@ -92,6 +95,20 @@ export function DynamicForm({
         case 'lookup':
           const options = lookupOptions[fieldPath] || [];
           const isLoading = !options.length && !lookupErrors[fieldPath];
+          const hasError = lookupErrors[fieldPath];
+          
+          // Handle different types of lookups
+          let selectValue = '';
+          if (fieldType.config?.isArrayItemLookup) {
+            // For array item lookups (like label in specialDates), use the string value directly
+            selectValue = currentValue || '';
+          } else if (currentValue && typeof currentValue === 'object' && currentValue !== null) {
+            // For object lookups, extract the ID from the object
+            selectValue = (currentValue as any)._id || (currentValue as any).id || '';
+          } else {
+            // For regular ID-based lookups
+            selectValue = currentValue || '';
+          }
           
           return (
             <div key={fieldPath} className="space-y-2">
@@ -100,8 +117,27 @@ export function DynamicForm({
                 <span className="text-xs text-primary ml-2">🔗 Lookup Field</span>
               </label>
               <select
-                value={currentValue || ''}
-                onChange={(e) => handleFieldChange(fieldPath, e.target.value)}
+                value={selectValue}
+                onChange={(e) => {
+                  const selectedId = e.target.value;
+                  if (fieldType.config?.isArrayItemLookup) {
+                    // For array item lookups, store the label string directly
+                    const selectedOption = options.find(opt => opt.id === selectedId);
+                    handleFieldChange(fieldPath, selectedOption ? selectedOption.label : '');
+                  } else if (fieldType.config?.isObjectLookup) {
+                    // For object lookups, find the selected option and store the full object
+                    const selectedOption = options.find(opt => opt.id === selectedId);
+                    if (selectedOption) {
+                      // Store the full object data instead of just the ID
+                      handleFieldChange(fieldPath, { _id: selectedId, name: selectedOption.label });
+                    } else {
+                      handleFieldChange(fieldPath, null);
+                    }
+                  } else {
+                    // For regular ID-based lookups, store just the ID
+                    handleFieldChange(fieldPath, selectedId);
+                  }
+                }}
                 className={`${commonInputProps.className} ${lookupErrors[fieldPath] ? 'border-red-500' : ''}`}
                 disabled={isLoading}
               >
@@ -114,8 +150,24 @@ export function DynamicForm({
                   </option>
                 ))}
               </select>
-              {lookupErrors[fieldPath] && (
-                <div className="text-red-600 text-sm">❌ {lookupErrors[fieldPath]}</div>
+              {hasError && (
+                <div className="text-red-600 text-sm flex items-center gap-2">
+                  <span>❌</span>
+                  <span>{hasError}</span>
+                  <button 
+                    onClick={() => {
+                      // Clear error and retry
+                      resetLookups();
+                      // Re-trigger lookup fetch
+                      if (fieldType.config) {
+                        fetchLookupOptions(fieldPath, fieldType.config);
+                      }
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Retry
+                  </button>
+                </div>
               )}
               {isLoading && (
                 <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -244,9 +296,28 @@ export function DynamicForm({
       const currentArray = getFieldValue(fieldPath) as any[] || [];
       
       const addItem = () => {
-        const newItem = config.isComplexArray 
-          ? { ...config.itemTemplate }
-          : '';
+        let newItem;
+        if (config.isComplexArray && config.itemTemplate) {
+          // Create a proper template item with all fields initialized
+          newItem = {};
+          Object.entries(config.itemTemplate).forEach(([key, value]) => {
+            if (typeof value === 'string') {
+              newItem[key] = '';
+            } else if (typeof value === 'number') {
+              newItem[key] = 0;
+            } else if (typeof value === 'boolean') {
+              newItem[key] = false;
+            } else if (Array.isArray(value)) {
+              newItem[key] = [];
+            } else if (typeof value === 'object' && value !== null) {
+              newItem[key] = {};
+            } else {
+              newItem[key] = '';
+            }
+          });
+        } else {
+          newItem = '';
+        }
         handleFieldChange(fieldPath, [...currentArray, newItem]);
       };
 
@@ -303,8 +374,19 @@ export function DynamicForm({
                   
                   {config.isComplexArray ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {Object.entries(item).map(([subKey, subValue]) => 
-                        renderField(subKey, subValue, `${fieldPath}[${index}].${subKey}`)
+                      {/* Render fields from the item or template */}
+                      {(item && typeof item === 'object' && Object.keys(item).length > 0) ? (
+                        Object.entries(item).map(([subKey, subValue]) => 
+                          renderField(subKey, subValue, `${fieldPath}[${index}].${subKey}`)
+                        )
+                      ) : config.itemTemplate ? (
+                        Object.entries(config.itemTemplate).map(([subKey, subValue]) => 
+                          renderField(subKey, subValue, `${fieldPath}[${index}].${subKey}`)
+                        )
+                      ) : (
+                        <div className="col-span-full text-gray-500">
+                          No template available for this array item
+                        </div>
                       )}
                     </div>
                   ) : (
@@ -323,42 +405,47 @@ export function DynamicForm({
       );
     }
 
-    // Group fields by type for better organization
-    function organizeFields(obj: Record<string, unknown>, parentPath = ''): {
-      basic: Array<[string, unknown, string]>;
-      lookup: Array<[string, unknown, string]>;
-      status: Array<[string, unknown, string]>;
-      complex: Array<[string, unknown, string]>;
-    } {
-      const groups: {
-        basic: Array<[string, unknown, string]>;
-        lookup: Array<[string, unknown, string]>;
-        status: Array<[string, unknown, string]>;
-        complex: Array<[string, unknown, string]>;
-      } = { 
-        basic: [] as Array<[string, unknown, string]>, 
-        lookup: [] as Array<[string, unknown, string]>, 
-        status: [] as Array<[string, unknown, string]>, 
-        complex: [] as Array<[string, unknown, string]> 
-      };
-      
-      Object.entries(obj).forEach(([key, value]) => {
-        const fieldPath = parentPath ? `${parentPath}.${key}` : key;
-        const fieldType = detectFieldType(key, value, parentPath);
-        
-        if (fieldType.type === 'lookup') {
-          groups.lookup.push([key, value, fieldPath]);
-        } else if (fieldType.type === 'status') {
-          groups.status.push([key, value, fieldPath]);
-        } else if (fieldType.type === 'array' || fieldType.type === 'object') {
-          groups.complex.push([key, value, fieldPath]);
-        } else {
-          groups.basic.push([key, value, fieldPath]);
-        }
-      });
-      
-      return groups;
-    }
+         // Group fields by type for better organization
+     function organizeFields(obj: Record<string, unknown>, parentPath = ''): {
+       basic: Array<[string, unknown, string]>;
+       lookup: Array<[string, unknown, string]>;
+       status: Array<[string, unknown, string]>;
+       complex: Array<[string, unknown, string]>;
+     } {
+       const groups: {
+         basic: Array<[string, unknown, string]>;
+         lookup: Array<[string, unknown, string]>;
+         status: Array<[string, unknown, string]>;
+         complex: Array<[string, unknown, string]>;
+       } = { 
+         basic: [] as Array<[string, unknown, string]>, 
+         lookup: [] as Array<[string, unknown, string]>, 
+         status: [] as Array<[string, unknown, string]>, 
+         complex: [] as Array<[string, unknown, string]> 
+       };
+       
+       Object.entries(obj).forEach(([key, value]) => {
+         // Skip fields that shouldn't be displayed (including "is" fields)
+         if (!shouldDisplayField(key, value)) {
+           return;
+         }
+         
+         const fieldPath = parentPath ? `${parentPath}.${key}` : key;
+         const fieldType = detectFieldType(key, value, parentPath);
+         
+         if (fieldType.type === 'lookup') {
+           groups.lookup.push([key, value, fieldPath]);
+         } else if (fieldType.type === 'status') {
+           groups.status.push([key, value, fieldPath]);
+         } else if (fieldType.type === 'array' || fieldType.type === 'object') {
+           groups.complex.push([key, value, fieldPath]);
+         } else {
+           groups.basic.push([key, value, fieldPath]);
+         }
+       });
+       
+       return groups;
+     }
 
     const fieldGroups = organizeFields(formState);
 

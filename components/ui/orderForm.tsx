@@ -155,25 +155,25 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
   // Load reference data and populate edit data if provided
   useEffect(() => {
     const loadData = async () => {
-      const { data: customersData } = await fetchAPI({ endpoint: 'customers', method: 'GET' });
+      const { data: customersData } = await fetchAPI({ endpoint: 'customers', method: 'GET', withAuth: true });
       if (customersData) {
         const customersArray = Array.isArray(customersData) ? customersData : (customersData.data || []);
         setCustomers(customersArray);
       }
 
-      const { data: factoriesData } = await fetchAPI({ endpoint: 'factories', method: 'GET' });
+      const { data: factoriesData } = await fetchAPI({ endpoint: 'factories', method: 'GET', withAuth: true });
       if (factoriesData) {
         const factoriesArray = Array.isArray(factoriesData) ? factoriesData : (factoriesData.data || []);
         setFactories(factoriesArray);
       }
 
-      const { data: measurementsData } = await fetchAPI({ endpoint: 'measurements', method: 'GET' });
+      const { data: measurementsData } = await fetchAPI({ endpoint: 'measurements', method: 'GET', withAuth: true });
       if (measurementsData) {
         const measurementsArray = Array.isArray(measurementsData) ? measurementsData : (measurementsData.data || []);
         setMeasurements(measurementsArray);
       }
 
-      const { data: catalogsData } = await fetchAPI({ endpoint: 'catalogs', method: 'GET' });
+      const { data: catalogsData } = await fetchAPI({ endpoint: 'catalogs', method: 'GET', withAuth: true });
       if (catalogsData) {
         const catalogsArray = Array.isArray(catalogsData) ? catalogsData : (catalogsData.data || []);
         setCatalogs(catalogsArray);
@@ -405,7 +405,7 @@ export function OrderForm({ slug, onClose, initialData, isEdit = false, editData
       // If no ID in response, fetch the latest customer
       if (!newCustomerId) {
         console.log('No ID in response, fetching latest customer...');
-        const { data: customersData } = await fetchAPI({ endpoint: 'customers', method: 'GET' });
+        const { data: customersData } = await fetchAPI({ endpoint: 'customers', method: 'GET', withAuth: true });
         if (customersData) {
           const customersArray = Array.isArray(customersData) ? customersData : (customersData.data || []);
           if (customersArray.length > 0) {

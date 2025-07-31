@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from "react";
 import { fetchAPI } from "@/lib/apiService";
 
@@ -32,6 +33,7 @@ export interface UseLookupReturn {
   extractDataArray: (data: unknown) => Array<Record<string, unknown>>;
   resetLookups: () => void;
   analyzeFormStructure: (obj: any, parentPath?: string) => void;
+  fetchLookupOptions: (fieldPath: string, config: any, retryCount?: number) => Promise<void>;
   // New functions from slug page
   renderCellValue: (value: unknown, fieldName?: string) => React.ReactNode;
   filterSubmitFields: (values: Record<string, unknown>) => Record<string, unknown>;
@@ -59,17 +61,96 @@ export function useLookup({
 
     // Array detection
     if (Array.isArray(value)) {
+      const isComplexArray = value.length > 0 && typeof value[0] === 'object';
+      const itemTemplate = value.length > 0 ? value[0] : {};
+      
+      // Dynamically analyze array items to find lookup fields
+      let lookupFields: string[] = [];
+      if (isComplexArray && itemTemplate && typeof itemTemplate === 'object') {
+        // Analyze all items in the array to find common fields that could be lookups
+        const allKeys = new Set<string>();
+        value.forEach(item => {
+          if (item && typeof item === 'object') {
+            Object.keys(item).forEach(key => allKeys.add(key));
+          }
+        });
+        
+                 // Check which fields appear in multiple items and could be lookups
+         allKeys.forEach(key => {
+           const lowerKey = key.toLowerCase();
+           const isLookupField = lowerKey.includes('label');
+           // Note: Only 'label' should be treated as a lookup field
+          
+          if (isLookupField) {
+            // Check if this field has different values across items (making it a good lookup candidate)
+            const uniqueValues = new Set();
+            value.forEach(item => {
+              if (item && typeof item === 'object' && item[key]) {
+                uniqueValues.add(String(item[key]));
+              }
+            });
+            
+            // If we have multiple unique values, it's a good lookup field
+            if (uniqueValues.size > 1) {
+              lookupFields.push(key);
+            }
+          }
+        });
+      }
+      
       return { 
         type: 'array', 
         config: { 
-          itemTemplate: value.length > 0 ? value[0] : {},
-          isComplexArray: value.length > 0 && typeof value[0] === 'object'
+          itemTemplate,
+          isComplexArray,
+          hasLookupFields: lookupFields.length > 0,
+          lookupFields // Store the detected lookup fields
         }
       };
     }
 
-    // Object detection
+    // Object detection (but check for lookup objects first)
     if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      const objKeys = Object.keys(value as Record<string, unknown>);
+      
+      // Check if this looks like a lookup object (has name, brandName, codeNumber, etc.)
+      const hasNameField = objKeys.some(k => 
+        k.toLowerCase().includes('name') || 
+        k.toLowerCase().includes('brand') || 
+        k.toLowerCase().includes('code') ||
+        k.toLowerCase().includes('title') ||
+        k.toLowerCase().includes('label')
+      );
+      
+      // Also check if the object has an _id field (common in MongoDB objects)
+      const hasIdField = objKeys.some(k => k === '_id' || k === 'id');
+      
+             if (hasNameField || hasIdField) {
+         // Determine the entity type based on the field name
+         let entityName = key.toLowerCase();
+         let endpoint = '';
+         
+         // Generic endpoint generation - just add 's' to make it plural
+         // This will work for any field name: vendor -> vendors, catalog -> catalogs, etc.
+         // But for fields ending with 'Id', we need to remove the 'Id' first
+         if (entityName.endsWith('id')) {
+           entityName = entityName.replace(/id$/, '');
+         }
+         endpoint = entityName + 's';
+        
+        return {
+          type: 'lookup',
+          config: {
+            endpoint,
+            displayField: 'name',
+            entityName,
+            fieldPath: fullPath,
+            isObjectLookup: true // Flag to indicate this is an object lookup
+          }
+        };
+      }
+      
+      // If not a lookup object, treat as regular object
       return { 
         type: 'object', 
         config: { 
@@ -105,18 +186,42 @@ export function useLookup({
       };
     }
 
-    // Lookup field detection (foreign key relationships)
+    // Lookup field detection (foreign key relationships) - only for known entities
     if (lowerKey.endsWith('id') && lowerKey !== 'id' && !lowerKey.startsWith('_')) {
       const entityName = key.replace(/Id$/i, '');
+      
+      // Only treat as lookup if it's a known entity with a valid endpoint
+      const knownEntities = ['customer', 'factory', 'measurement', 'catalog', 'vendor', 'label'];
+      if (knownEntities.includes(entityName.toLowerCase())) {
+        return {
+          type: 'lookup',
+          config: {
+            endpoint: entityName.toLowerCase() + 's', // e.g., customer -> customers, not customerids
+            displayField: 'name',
+            entityName,
+            fieldPath: fullPath // Store the full path for debugging
+          }
+        };
+      }
+    }
+
+    // Lookup field detection for common field names (like label, etc.)
+    // Note: Only treat specific fields as lookups, not all common fields
+    if (lowerKey === 'label') {
+      // Only 'label' should be treated as a lookup field
       return {
         type: 'lookup',
         config: {
-          endpoint: entityName.toLowerCase() + 's',
+          endpoint: 'labels',
           displayField: 'name',
-          entityName
+          entityName: 'label',
+          fieldPath: fullPath,
+          isArrayItemLookup: true // Flag to indicate this is a lookup field within an array item
         }
       };
     }
+
+
 
     // Default to text
     return { type: 'text' };
@@ -256,10 +361,10 @@ export function useLookup({
 
   // Check if field should be displayed
   const shouldDisplayField = useCallback((key: string, value: unknown): boolean => {
-    const skipFields = ["_id", "__v", "createdAt", "updatedAt", "isDeleted"];
+    const skipFields = ["_id", "__v", "createdAt", "updatedAt"];
     if (skipFields.includes(key)) return false;
-    if (value === null || value === undefined) return false;
-    if (typeof value === "string" && value.trim() === "") return false;
+    
+    // Don't filter out null/undefined/empty values - show all fields for form input
     return true;
   }, []);
 
@@ -285,31 +390,158 @@ export function useLookup({
     return [];
   }, []);
 
-  // Enhanced lookup fetching with better error handling
-  const fetchLookupOptions = useCallback(async (fieldPath: string, config: any) => {
+  // Enhanced lookup fetching with better error handling and retry logic
+  const fetchLookupOptions = useCallback(async (fieldPath: string, config: any, retryCount = 0) => {
     if (!config.endpoint) return;
     
-    console.log(`🔄 Fetching lookup options for ${fieldPath} from /${config.endpoint}`);
+    // List of valid endpoints that actually exist
+    const validEndpoints = ['customers', 'factories', 'measurements', 'catalogs', 'vendors', 'labels'];
+    
+    // Skip fetching if endpoint doesn't exist
+    if (!validEndpoints.includes(config.endpoint)) {
+      console.log(`⚠️ Skipping lookup for ${fieldPath} - endpoint /${config.endpoint} doesn't exist`);
+      return;
+    }
+    
+    // Handle array item lookups dynamically based on existing data
+    if (config.isArrayItemLookup) {
+      // Extract unique values from existing array data to create dynamic options
+      const existingValues = new Set<string>();
+      
+      // Find the array data in the current form data
+      let arrayFieldName = '';
+      const match = fieldPath.match(/(\w+)\[\d+\]/); // Extract array name from patterns like specialDates[0]
+      if (match && match[1]) {
+        arrayFieldName = match[1]; // Get the base array name (e.g., 'specialDates' from 'specialDates[0]')
+      } else {
+        // Fallback: try to get from path parts
+        const pathParts = fieldPath.split('.');
+        arrayFieldName = pathParts[pathParts.length - 2];
+      }
+      
+      if (data && typeof data === 'object') {
+        // Navigate to the array field
+        let arrayData: any[] = [];
+        if (Array.isArray(data)) {
+          // If data is an array, look for the array field in each item
+          data.forEach(item => {
+            if (item && typeof item === 'object' && item[arrayFieldName] && Array.isArray(item[arrayFieldName])) {
+              arrayData = arrayData.concat(item[arrayFieldName]);
+            }
+          });
+        } else {
+          // If data is an object, look for the array field directly
+          if (data && typeof data === 'object' && data[arrayFieldName] && Array.isArray(data[arrayFieldName])) {
+            arrayData = data[arrayFieldName] as any[];
+          }
+        }
+        
+        // Extract unique values for the lookup field
+        arrayData.forEach(item => {
+          if (item && typeof item === 'object' && item[config.entityName]) {
+            const value = item[config.entityName];
+            if (typeof value === 'string' && value.trim()) {
+              existingValues.add(value);
+            }
+          }
+        });
+      }
+      
+             // Create dynamic options from existing values
+       const dynamicOptions: LookupOption[] = Array.from(existingValues).map(value => ({
+         id: value, // Use the actual value as ID for array item lookups
+         label: value
+       }));
+      
+             // Add some common options if we don't have many existing values
+       if (dynamicOptions.length < 3) {
+         const commonOptions = {
+           label: ['Birthday', 'Anniversary', 'Wedding', 'Graduation', 'Holiday', 'Other'],
+           type: ['Personal', 'Business', 'Family', 'Other'],
+           category: ['Urgent', 'Normal', 'Low Priority']
+         };
+        
+                 const commonForType = commonOptions[config.entityName as keyof typeof commonOptions] || [];
+         commonForType.forEach(option => {
+           if (!existingValues.has(option)) {
+             dynamicOptions.push({
+               id: option, // Use the actual value as ID for array item lookups
+               label: option
+             });
+           }
+         });
+      }
+      
+      if (dynamicOptions.length > 0) {
+        console.log(`✅ Loaded ${dynamicOptions.length} dynamic options for ${fieldPath}:`, dynamicOptions);
+        setLookupOptions(prev => ({ ...prev, [fieldPath]: dynamicOptions }));
+        return;
+      }
+    }
+    
+    console.log(`🔄 Fetching lookup options for ${fieldPath} from /${config.endpoint}${retryCount > 0 ? ` (retry ${retryCount})` : ''}`);
+    console.log(`📋 Config:`, config);
+    console.log(`📍 Field path: ${fieldPath}, Config fieldPath: ${config.fieldPath}`);
+    
+    // Check if we're in browser and have auth token
+    if (typeof window !== "undefined") {
+      const token = document.cookie.split('; ').find(row => row.startsWith('refresh_token='))?.split('=')[1];
+      console.log(`🔑 Auth token available: ${token ? 'Yes' : 'No'}`);
+    }
     
     try {
-      const { data: response, error } = await fetchAPI({ 
-        endpoint: config.endpoint, 
-        method: 'GET' 
-      });
+      // Add timeout to prevent hanging requests
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 10000)
+      );
       
-      if (error) {
-        console.error(`❌ Failed to fetch from /${config.endpoint}:`, error);
+      console.log(`🔐 Making authenticated API request to: ${config.endpoint}`);
+      const fetchPromise = fetchAPI({ 
+        endpoint: config.endpoint, 
+        method: 'GET',
+        withAuth: true // Add authentication for lookup requests
+      });
+      const result = await Promise.race([fetchPromise, timeoutPromise]) as any;
+      
+      console.log(`📥 Raw API response for ${fieldPath}:`, result);
+      
+      if (result.error) {
+        console.error(`❌ Failed to fetch from /${config.endpoint}:`, result.error);
         setLookupErrors(prev => ({ 
           ...prev, 
-          [fieldPath]: `Failed to load from /${config.endpoint}` 
+          [fieldPath]: `Failed to load from /${config.endpoint}: ${result.error}` 
+        }));
+        return;
+      }
+      
+      const response = result.data;
+      if (!response) {
+        console.error(`❌ No data received from /${config.endpoint}`);
+        setLookupErrors(prev => ({ 
+          ...prev, 
+          [fieldPath]: `No data received from /${config.endpoint}` 
         }));
         return;
       }
 
       // Extract array from various response formats
+      const entityField = config.entityName.toLowerCase() + 'Info'; // e.g., customerInfo, factoryInfo
       const dataArray = Array.isArray(response) 
         ? response 
-        : response?.data || response?.items || response?.results || [];
+        : response?.data || response?.items || response?.results || response?.[entityField] || [];
+
+      console.log(`📊 Response structure for ${fieldPath}:`, {
+        responseType: typeof response,
+        isArray: Array.isArray(response),
+        hasData: !!response?.data,
+        hasItems: !!response?.items,
+        hasResults: !!response?.results,
+        entityField,
+        hasEntityField: !!response?.[entityField],
+        dataArrayLength: Array.isArray(dataArray) ? dataArray.length : 'not array',
+        firstItem: Array.isArray(dataArray) && dataArray.length > 0 ? dataArray[0] : null,
+        responseKeys: response ? Object.keys(response) : 'null/undefined'
+      });
 
       if (!Array.isArray(dataArray) || dataArray.length === 0) {
         console.warn(`⚠️ No data found in /${config.endpoint}`);
@@ -325,17 +557,53 @@ export function useLookup({
         // Try to find the best display field
         let label = '';
         
-        // First try entity-specific name field
-        const entitySpecificField = config.entityName + 'Name';
-        if (item[entitySpecificField]) {
-          label = item[entitySpecificField];
-        } else {
-          // Try common display fields
-          const displayFields = ['name', 'title', 'label', 'displayName', 'fullName'];
-          for (const field of displayFields) {
-            if (item[field] && typeof item[field] === 'string') {
-              label = item[field];
-              break;
+                 // For object lookups, try to find the most descriptive field
+         if (config.isObjectLookup) {
+           // Try entity-specific fields first (e.g., vendorName, customerName, etc.)
+           const entitySpecificField = config.entityName + 'Name';
+           if (item[entitySpecificField] && typeof item[entitySpecificField] === 'string') {
+             label = item[entitySpecificField];
+           } else {
+             // Try common display fields in order of preference
+             const displayFields = [
+               'name', 
+               'title', 
+               'label', 
+               'displayName', 
+               'fullName',
+               'brandName',
+               'vendorName',
+               'customerName',
+               'factoryName'
+             ];
+             
+             for (const field of displayFields) {
+               if (item[field] && typeof item[field] === 'string') {
+                 label = item[field];
+                 break;
+               }
+             }
+           }
+           
+           // For objects with multiple descriptive fields, try to combine them
+           if (!label && item.brandName && item.codeNumber) {
+             label = `${item.brandName} - ${item.codeNumber}`;
+           } else if (!label && item.name && item.code) {
+             label = `${item.name} - ${item.code}`;
+           }
+         } else {
+          // Original logic for ID-based lookups
+          const entitySpecificField = config.entityName + 'Name';
+          if (item[entitySpecificField]) {
+            label = item[entitySpecificField];
+          } else {
+            // Try common display fields
+            const displayFields = ['name', 'title', 'label', 'displayName', 'fullName'];
+            for (const field of displayFields) {
+              if (item[field] && typeof item[field] === 'string') {
+                label = item[field];
+                break;
+              }
             }
           }
         }
@@ -352,9 +620,19 @@ export function useLookup({
       
     } catch (err) {
       console.error(`❌ Error fetching lookup options for ${fieldPath}:`, err);
+      
+      // Retry logic for network errors (but not for 4xx errors)
+      if (retryCount < 2 && err instanceof Error && !err.message.includes('Failed to load')) {
+        console.log(`🔄 Retrying lookup for ${fieldPath}...`);
+        setTimeout(() => {
+          fetchLookupOptions(fieldPath, config, retryCount + 1);
+        }, 1000 * (retryCount + 1)); // Exponential backoff
+        return;
+      }
+      
       setLookupErrors(prev => ({ 
         ...prev, 
-        [fieldPath]: 'Network error while loading options' 
+        [fieldPath]: `Network error while loading options: ${err instanceof Error ? err.message : 'Unknown error'}` 
       }));
     }
   }, []);
@@ -362,6 +640,9 @@ export function useLookup({
   // Recursively analyze form structure and fetch lookup data
   const analyzeFormStructure = useCallback((obj: any, parentPath = '') => {
     Object.entries(obj).forEach(([key, value]) => {
+      // Skip fields that start with "is" (boolean flags) from lookup analysis
+      if (key.toLowerCase().startsWith('is')) return;
+      
       const fieldPath = parentPath ? `${parentPath}.${key}` : key;
       const fieldType = detectFieldType(key, value, parentPath);
       
@@ -426,6 +707,7 @@ export function useLookup({
     extractDataArray,
     resetLookups,
     analyzeFormStructure,
+    fetchLookupOptions,
     // New functions from slug page
     renderCellValue: (value: unknown, fieldName?: string) => {
       if (value == null) return "-";

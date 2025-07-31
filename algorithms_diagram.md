@@ -142,7 +142,7 @@
 │         │                    │                    │                    │
 │         ▼                    ▼                    ▼                    ▼
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  │  State      │    │  Callback   │    │  Array      │    │  Function   │
+│  │  State      │    │  Callback   │    │  Array      │    │  Function   │ th
 │  │  Update     │    │  Execution  │    │  Comparison │    │  Execution  │
 │  └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
 │
