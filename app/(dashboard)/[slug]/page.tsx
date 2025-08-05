@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbSeparator, BreadcrumbPage } from "@/components/ui/breadcrumb";
 import { DynamicForm } from "@/components/Forms/DynamicFom";
-import { OrderForm } from "@/components/ui/orderForm";
+import OrderFormWithErrorBoundary from "@/components/ui/orderForm";
 import { OrderTable } from "@/components/ui/orderTable";
 import { useLookup } from "@/lib/hooks/useLookup";
 
@@ -403,7 +403,6 @@ export default function SlugPage() {
   
   // Loading states for actions
   const [isAdding, setIsAdding] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState<number | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<number | null>(null);
   const [isDownloading, setIsDownloading] = useState<number | null>(null);
@@ -456,6 +455,18 @@ export default function SlugPage() {
   const updateMutation = useAPIMutation({
     endpoint: slug || '',
     method: 'PUT',
+    onSuccess: () => {
+      showAlert("Update successful!", "success");
+      refetch();
+    },
+    onError: (error) => {
+      showAlert(`Failed to update: ${error}`, "destructive");
+    },
+  });
+
+  const patchMutation = useAPIMutation({
+    endpoint: slug || '',
+    method: 'PATCH',
     onSuccess: () => {
       showAlert("Update successful!", "success");
       refetch();
@@ -576,41 +587,119 @@ export default function SlugPage() {
     const editId = itemToEdit?._id as string;
     const filteredData = filterSubmitFields(data);
     
-    await updateMutation.mutateAsync({
-      ...filteredData,
-      _id: editId,
+    if (!editId) {
+      showAlert("Item ID not found for update", "destructive");
+      return;
+    }
+    
+    console.log('🔄 Updating item:', { editId, filteredData, slug });
+    
+    // Use fetchAPI directly to include ID in URL
+    const result = await fetchAPI({
+      endpoint: slug || '',
+      method: 'PUT',
+      id: editId,
+      data: filteredData,
+      withAuth: true
     });
-    setEditIdx(null);
+    
+    if (result.error) {
+      showAlert(`Failed to update: ${result.error}`, "destructive");
+    } else {
+      showAlert("Update successful!", "success");
+      refetch();
+      setEditIdx(null);
+    }
   };
 
   const handleDelete = async (idx: number) => {
     const itemToDelete = apiResponse[idx];
     const deleteId = itemToDelete?._id as string;
     
-    await deleteMutation.mutateAsync({
-      _id: deleteId,
+    if (!deleteId) {
+      showAlert("Item ID not found for deletion", "destructive");
+      return;
+    }
+    
+    console.log('🗑️ Deleting item:', { deleteId, slug });
+    
+    // Use fetchAPI directly to include ID in URL
+    const result = await fetchAPI({
+      endpoint: slug || '',
+      method: 'DELETE',
+      id: deleteId,
+      withAuth: true
     });
-    setDeleteIdx(null);
+    
+    if (result.error) {
+      showAlert(`Failed to delete: ${result.error}`, "destructive");
+    } else {
+      showAlert("Deleted successfully!", "success");
+      refetch();
+      setDeleteIdx(null);
+    }
   };
 
   const handleStatusUpdate = async (idx: number, fieldName: string, newValue: string) => {
     const itemToUpdate = apiResponse[idx];
     const statusId = itemToUpdate?._id as string;
     
-    await statusUpdateMutation.mutateAsync({
-      _id: statusId,
-      [fieldName]: newValue,
+    if (!statusId) {
+      showAlert("Item ID not found for status update", "destructive");
+      return;
+    }
+    
+    console.log('🔄 Updating status:', { statusId, fieldName, newValue, slug });
+    
+    // Use PATCH for orders, PUT for other entities
+    const method = slug === 'orders' ? 'PATCH' : 'PUT';
+    
+    // Use fetchAPI directly to include ID in URL
+    const result = await fetchAPI({
+      endpoint: slug || '',
+      method: method,
+      id: statusId,
+      data: { [fieldName]: newValue },
+      withAuth: true
     });
+    
+    if (result.error) {
+      showAlert(`Failed to update status: ${result.error}`, "destructive");
+    } else {
+      showAlert("Status updated successfully!", "success");
+      refetch();
+    }
   };
 
   const handleFieldUpdate = async (idx: number, fieldName: string, newValue: string) => {
     const itemToUpdate = apiResponse[idx];
     const fieldId = itemToUpdate?._id as string;
     
-    await statusUpdateMutation.mutateAsync({
-      _id: fieldId,
-      [fieldName]: newValue,
+    if (!fieldId) {
+      showAlert("Item ID not found for field update", "destructive");
+      return;
+    }
+    
+    console.log('🔄 Updating field:', { fieldId, fieldName, newValue, slug });
+    
+    // Use PATCH for orders, PUT for other entities
+    const method = slug === 'orders' ? 'PATCH' : 'PUT';
+    
+    // Use fetchAPI directly to include ID in URL
+    const result = await fetchAPI({
+      endpoint: slug || '',
+      method: method,
+      id: fieldId,
+      data: { [fieldName]: newValue },
+      withAuth: true
     });
+    
+    if (result.error) {
+      showAlert(`Failed to update field: ${result.error}`, "destructive");
+    } else {
+      showAlert("Field updated successfully!", "success");
+      refetch();
+    }
   };
 
   return (
@@ -668,10 +757,10 @@ export default function SlugPage() {
       
       {/* Show OrderForm when addOpen is true for orders */}
       {slug === 'orders' && addOpen && (
-        <OrderForm 
-          slug={slug} 
-          onClose={() => setAddOpen(false)}
-          isEdit={false}
+        <OrderFormWithErrorBoundary 
+          onSuccess={() => setAddOpen(false)}
+          onCancel={() => setAddOpen(false)}
+          mode="create"
         />
       )}
       
@@ -806,9 +895,9 @@ export default function SlugPage() {
                             onClick={() => setEditIdx(idx)}
                             title="Edit"
                             size="icon"
-                            disabled={isEditing}
+                            disabled={patchMutation.isLoading}
                           >
-                            {isEditing && editIdx === idx ? (
+                                                          {patchMutation.isLoading && editIdx === idx ? (
                               <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                             ) : (
                               <MdEdit className="w-4 h-4" />
@@ -872,17 +961,14 @@ export default function SlugPage() {
       />
       {/* Edit Modal - Use OrderForm for orders, DynamicForm for others */}
       {slug === 'orders' ? (
-        <Modal open={editIdx !== null} onClose={() => setEditIdx(null)}>
-          <h2 className="text-lg font-semibold mb-2">Edit Order</h2>
-          {editIdx !== null && (
-            <OrderForm
-              slug={slug}
-              onClose={() => setEditIdx(null)}
-              isEdit={true}
-              editData={apiResponse[editIdx]}
-            />
-          )}
-        </Modal>
+        editIdx !== null && (
+                          <OrderFormWithErrorBoundary
+                  initialData={apiResponse[editIdx]}
+                  onSuccess={() => setEditIdx(null)}
+                  onCancel={() => setEditIdx(null)}
+                  mode="edit"
+                />
+        )
       ) : (
         <Modal open={editIdx !== null} onClose={() => setEditIdx(null)} isFullScreen={true}>
           {editIdx !== null && (
@@ -892,7 +978,7 @@ export default function SlugPage() {
                 await handleUpdate(values, editIdx!);
               }}
               onCancel={() => setEditIdx(null)}
-              isLoading={isEditing}
+              isLoading={patchMutation.isLoading}
             />
           )}
         </Modal>

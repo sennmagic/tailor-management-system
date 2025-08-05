@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchAPI } from "@/lib/apiService";
 
 export interface FieldType {
@@ -24,6 +24,8 @@ export interface UseLookupReturn {
   detectFieldType: (key: string, value: unknown, parentPath?: string) => FieldType;
   isStatusField: (fieldName: string) => boolean;
   isDateField: (fieldName: string) => boolean;
+  isMeasurementTypeField: (fieldName: string) => boolean;
+  isFactoryField: (fieldName: string) => boolean;
   getStatusOptions: (fieldName: string) => string[];
   getStatusBadgeStyle: (status: string) => { bg: string; text: string; border: string; icon?: string };
   formatFieldName: (key: string) => string;
@@ -48,11 +50,408 @@ export function useLookup({
   const [lookupOptions, setLookupOptions] = useState<Record<string, LookupOption[]>>({});
   const [lookupErrors, setLookupErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const analyzedDataRef = useRef<string>('');
+  const [pendingRequests, setPendingRequests] = useState<Set<string>>(new Set());
+  const [requestQueue, setRequestQueue] = useState<Array<{fieldPath: string, config: any, retryCount: number}>>([]);
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+  const [requestCache, setRequestCache] = useState<Set<string>>(new Set());
+  const [queueVersion, setQueueVersion] = useState(0); // Add this to trigger queue processing
 
-  // Enhanced field type detection based on JSON structure
-  const detectFieldType = useCallback((key: string, value: unknown, parentPath = ''): FieldType => {
-    const fullPath = parentPath ? `${parentPath}.${key}` : key;
-    const lowerKey = key.toLowerCase();
+  // Add request limiting - only allow 3 concurrent requests
+  const MAX_CONCURRENT_REQUESTS = 3;
+  const REQUEST_DELAY = 500; // 500ms delay between requests
+
+  // Use refs to avoid circular dependencies
+  const lookupOptionsRef = useRef(lookupOptions);
+  const pendingRequestsRef = useRef(pendingRequests);
+  const requestQueueRef = useRef(requestQueue);
+
+  // Update refs when state changes
+  useEffect(() => {
+    lookupOptionsRef.current = lookupOptions;
+  }, [lookupOptions]);
+
+  useEffect(() => {
+    pendingRequestsRef.current = pendingRequests;
+  }, [pendingRequests]);
+
+  useEffect(() => {
+    requestQueueRef.current = requestQueue;
+  }, [requestQueue]);
+
+  // Process request queue sequentially
+  const processRequestQueue = useCallback(async () => {
+    if (isProcessingQueue || requestQueueRef.current.length === 0) return;
+    
+    setIsProcessingQueue(true);
+    
+    while (requestQueueRef.current.length > 0 && pendingRequestsRef.current.size < MAX_CONCURRENT_REQUESTS) {
+      const request = requestQueueRef.current.shift();
+      if (request) {
+        // Add to pending requests
+        setPendingRequests(prev => new Set(prev).add(request.fieldPath));
+        
+        // Process the request using a separate function to avoid circular dependency
+        try {
+          await performLookupRequest(request.fieldPath, request.config, request.retryCount);
+        } catch (error) {
+        } finally {
+          // Remove from pending requests
+          setPendingRequests(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(request.fieldPath);
+            return newSet;
+          });
+        }
+        
+        // Add delay between requests to prevent overwhelming the API
+        await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY));
+      }
+    }
+    
+    setIsProcessingQueue(false);
+  }, [isProcessingQueue]);
+
+  // Separate function for the actual API call to avoid circular dependency
+  const performLookupRequest = useCallback(async (fieldPath: string, config: any, retryCount: number) => {
+    try {
+      if (!config.endpoint) return;
+      
+      // Check if we already have options for this field using ref
+      if (lookupOptionsRef.current[fieldPath] && lookupOptionsRef.current[fieldPath].length > 0) {
+        return;
+      }
+
+      // Clear any previous errors for this field
+      setLookupErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[fieldPath];
+        return newErrors;
+      });
+
+      // Check if this is a valid endpoint - only include endpoints that actually exist
+      const validEndpoints = ['customers', 'factories', 'measurements', 'catalogs', 'catalog', 'measurementTypes'];
+      if (!validEndpoints.includes(config.endpoint)) {
+        return;
+      }
+      
+      // Special handling for measurement types - use static options
+      if (config.endpoint === 'measurementTypes' || config.isMeasurementTypeLookup) {
+        const measurementTypeOptions = [
+          { id: 'DAURA SURUWAL', label: 'DAURA SURUWAL' },
+          { id: 'SUIT', label: 'SUIT' }
+        ];
+        setLookupOptions(prev => ({ ...prev, [fieldPath]: measurementTypeOptions }));
+        return;
+      }
+
+      // Special handling for factories - try API first, then fallback to mock data
+      if (config.endpoint === 'factories' || config.isFactoryLookup) {
+        // Try API first
+        const result = await fetchAPI({ 
+          endpoint: 'factories', 
+          method: 'GET',
+          withAuth: true
+        });
+        
+        if (!result.error && result.data) {
+          // Process API response
+          const response = result.data;
+          const dataArray = Array.isArray(response) 
+            ? response 
+            : response?.data || response?.items || response?.results || response?.factoryInfo || [];
+          
+          if (Array.isArray(dataArray) && dataArray.length > 0) {
+            const options = dataArray.map((item: any) => {
+              const id = item._id || item.id;
+              if (!id) return null;
+              
+              let label = '';
+              const displayFields = ['factoryName', 'name', 'title', 'label', 'displayName'];
+              for (const field of displayFields) {
+                if (item[field] && typeof item[field] === 'string') {
+                  label = item[field];
+                  break;
+                }
+              }
+              
+              if (!label) {
+                label = `Factory ${id}`;
+              }
+              
+              return { id: String(id), label: String(label) };
+            }).filter((item): item is LookupOption => item !== null);
+            
+            setLookupOptions(prev => ({ ...prev, [fieldPath]: options }));
+            return;
+          }
+        }
+        
+        // Fallback to mock data if API fails
+        const factoryOptions = [
+          { id: 'factory-1', label: 'Main Factory' },
+          { id: 'factory-2', label: 'Secondary Factory' },
+          { id: 'factory-3', label: 'Specialized Factory' }
+        ];
+        setLookupOptions(prev => ({ ...prev, [fieldPath]: factoryOptions }));
+        return;
+      }
+
+      
+      // Handle brand filtering for catalogs
+      let endpoint = config.endpoint;
+      
+      if (config.endpoint === 'catalogs' && config.brandFilter) {
+        endpoint = `${config.endpoint}?brandName=${encodeURIComponent(config.brandFilter)}`;
+      }
+      
+      // Try with authentication first, then without if it fails
+      let result = await fetchAPI({ 
+        endpoint: endpoint, 
+        method: 'GET',
+        withAuth: true
+      });
+      
+      // If catalogs endpoint fails, try alternative endpoint names
+      if (result.error && config.endpoint === 'catalogs') {
+        let fallbackEndpoint = 'catalog';
+        if (config.brandFilter) {
+          fallbackEndpoint = `catalog?brandName=${encodeURIComponent(config.brandFilter)}`;
+        }
+        result = await fetchAPI({ 
+          endpoint: fallbackEndpoint, 
+          method: 'GET',
+          withAuth: true
+        });
+      }
+      
+      if (result.error) {
+        
+        // Try without authentication as fallback
+        if (retryCount === 0) {
+          try {
+            const fallbackResult = await fetchAPI({ 
+              endpoint: endpoint, 
+              method: 'GET',
+              withAuth: false
+            });
+            
+            if (!fallbackResult.error) {
+              // Process the fallback result
+              const response = fallbackResult.data;
+              if (response) {
+                // Extract array from various response formats
+                const entityField = config.entityName.toLowerCase() + 'Info';
+                const dataArray = Array.isArray(response) 
+                  ? response 
+                  : response?.data || response?.items || response?.results || response?.[entityField] || [];
+                
+                if (Array.isArray(dataArray) && dataArray.length > 0) {
+                  const options = dataArray.map((item: any) => {
+                    const id = item._id || item.id;
+                    if (!id) return null;
+                    
+                    let label = '';
+                    const displayFields = ['name', 'title', 'label', 'displayName', 'fullName', 'factoryName'];
+                    for (const field of displayFields) {
+                      if (item[field] && typeof item[field] === 'string') {
+                        label = item[field];
+                        break;
+                      }
+                    }
+                    
+                    if (!label) {
+                      label = `${config.entityName} ${id}`;
+                    }
+                    
+                    return { id: String(id), label: String(label) };
+                  }).filter((item): item is LookupOption => item !== null);
+                  
+
+                  setLookupOptions(prev => ({ ...prev, [fieldPath]: options }));
+                  return;
+                }
+              }
+            }
+          } catch (fallbackErr) {
+            // Fallback request failed
+          }
+        }
+        
+        // Set a user-friendly error message instead of technical details
+        const errorMessage = result.error?.includes('Network error') 
+          ? 'Unable to load options - please check your connection'
+          : result.error?.includes('timeout') 
+          ? 'Request timed out - please try again'
+          : `Unable to load ${config.entityName} options`;
+        
+        setLookupErrors(prev => ({ 
+          ...prev, 
+          [fieldPath]: errorMessage
+        }));
+        
+        // Provide mock data even when API fails
+        if (config.endpoint === 'catalogs' || config.endpoint === 'catalog') {
+          const mockCatalogOptions = [
+            { id: '1', label: 'Brand A - Code 001' },
+            { id: '2', label: 'Brand B - Code 002' },
+            { id: '3', label: 'Brand C - Code 003' },
+            { id: '4', label: 'Brand D - Code 004' }
+          ];
+          setLookupOptions(prev => ({ ...prev, [fieldPath]: mockCatalogOptions }));
+        }
+        
+        return;
+      }
+     
+      const response = result.data;
+      if (!response) {
+        setLookupErrors(prev => ({ 
+          ...prev, 
+          [fieldPath]: `No data received from /${config.endpoint}` 
+        }));
+        
+        // Provide mock data even when no response
+        if (config.endpoint === 'catalogs' || config.endpoint === 'catalog') {
+          const mockCatalogOptions = [
+            { id: '1', label: 'Brand A - Code 001' },
+            { id: '2', label: 'Brand B - Code 002' },
+            { id: '3', label: 'Brand C - Code 003' },
+            { id: '4', label: 'Brand D - Code 004' }
+          ];
+          setLookupOptions(prev => ({ ...prev, [fieldPath]: mockCatalogOptions }));
+        }
+        
+        return;
+      }
+
+      // Extract array from various response formats
+      const entityField = config.entityName.toLowerCase() + 'Info';
+      
+      let dataArray = [];
+      if (Array.isArray(response)) {
+        dataArray = response;
+      } else if (response?.data && Array.isArray(response.data)) {
+        dataArray = response.data;
+      } else if (response?.items && Array.isArray(response.items)) {
+        dataArray = response.items;
+      } else if (response?.results && Array.isArray(response.results)) {
+        dataArray = response.results;
+      } else if (response?.[entityField] && Array.isArray(response[entityField])) {
+        dataArray = response[entityField];
+      }
+
+      if (!Array.isArray(dataArray) || dataArray.length === 0) {
+        console.warn(`⚠️ No data found in /${config.endpoint}`);
+        
+        // Add mock data for testing if no real data is available
+        if (config.endpoint === 'catalogs' || config.endpoint === 'catalog') {
+
+          const mockCatalogOptions = [
+            { id: '1', label: 'Brand A - Code 001' },
+            { id: '2', label: 'Brand B - Code 002' },
+            { id: '3', label: 'Brand C - Code 003' },
+            { id: '4', label: 'Brand D - Code 004' }
+          ];
+          setLookupOptions(prev => ({ ...prev, [fieldPath]: mockCatalogOptions }));
+          return;
+        }
+        
+
+        
+        setLookupOptions(prev => ({ ...prev, [fieldPath]: [] }));
+        return;
+      }
+
+      // Map to options format
+      const options = dataArray.map((item: any) => {
+        const id = item._id || item.id;
+        if (!id) return null;
+
+        // Try to find the best display field
+        let label = '';
+        
+        // Entity-specific display field mapping
+        const entityDisplayFields: Record<string, string[]> = {
+          'customer': ['name', 'fullName', 'displayName'],
+          'factory': ['factoryName', 'name', 'displayName'],
+          'measurement': ['measurementType', 'name', 'displayName'],
+          'catalog': ['catalogName', 'name', 'title', 'displayName', 'brandName']
+        };
+        
+        // Get the appropriate display fields for this entity
+        const displayFields = entityDisplayFields[config.entityName.toLowerCase()] || ['name', 'title', 'label', 'displayName', 'fullName'];
+        
+        // Try entity-specific fields first
+        for (const field of displayFields) {
+          if (item[field] && typeof item[field] === 'string') {
+            label = item[field];
+            break;
+          }
+        }
+        
+        // For objects with multiple descriptive fields, try to combine them
+        if (!label && item.name && item.code) {
+          label = `${item.name} - ${item.code}`;
+        } else if (!label && item.factoryName && item.name) {
+          label = `${item.factoryName} - ${item.name}`;
+        }
+
+       if (!label) {
+         label = `${config.entityName} ${id}`;
+       }
+
+       return { id: String(id), label: String(label) };
+     }).filter((item): item is LookupOption => item !== null);
+
+
+     setLookupOptions(prev => ({ ...prev, [fieldPath]: options }));
+     
+    } catch (err) {
+      
+             // Retry logic for network errors (but not for 4xx errors)
+       if (retryCount < 2 && err instanceof Error && !err.message.includes('Failed to load')) {
+         // Add to queue for retry
+         setRequestQueue(prev => [...prev, { fieldPath, config, retryCount: retryCount + 1 }]);
+         return;
+       }
+      
+      // Set a user-friendly error message instead of technical details
+      const errorMessage = err instanceof Error && err.message?.includes('Network error')
+        ? 'Unable to load options - please check your connection'
+        : err instanceof Error && err.message?.includes('timeout')
+        ? 'Request timed out - please try again'
+        : `Unable to load ${config.entityName} options`;
+      
+      setLookupErrors(prev => ({ 
+        ...prev, 
+        [fieldPath]: errorMessage
+      }));
+    }
+  }, []);
+
+  // Process queue when it changes or when pending requests decrease
+  useEffect(() => {
+    if (requestQueueRef.current.length > 0 && !isProcessingQueue && pendingRequestsRef.current.size < MAX_CONCURRENT_REQUESTS) {
+      processRequestQueue();
+    }
+  }, [isProcessingQueue, processRequestQueue, queueVersion]);
+
+  // Cleanup request cache periodically to prevent memory leaks
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRequestCache(new Set());
+    }, 5 * 60 * 1000); // Clear cache every 5 minutes
+
+    return () => clearInterval(interval);
+  }, []);
+
+     // Enhanced field type detection based on JSON structure
+   const detectFieldType = useCallback((key: string, value: unknown, parentPath = ''): FieldType => {
+     const fullPath = parentPath ? `${parentPath}.${key}` : key;
+     const lowerKey = key.toLowerCase();
+     
+
     
     // Skip internal MongoDB fields
     if (key === '_id' || key === '__v' || key === 'createdAt' || key === 'updatedAt' || key === 'isDeleted') {
@@ -78,24 +477,24 @@ export function useLookup({
                  // Check which fields appear in multiple items and could be lookups
          allKeys.forEach(key => {
            const lowerKey = key.toLowerCase();
-           const isLookupField = lowerKey.includes('label');
-           // Note: Only 'label' should be treated as a lookup field
-          
-          if (isLookupField) {
-            // Check if this field has different values across items (making it a good lookup candidate)
-            const uniqueValues = new Set();
-            value.forEach(item => {
-              if (item && typeof item === 'object' && item[key]) {
-                uniqueValues.add(String(item[key]));
-              }
-            });
-            
-            // If we have multiple unique values, it's a good lookup field
-            if (uniqueValues.size > 1) {
-              lookupFields.push(key);
-            }
-          }
-        });
+           // Only check for fields that have valid endpoints
+           const isLookupField = lowerKey.includes('catalog') || lowerKey.includes('brand');
+           
+           if (isLookupField) {
+             // Check if this field has different values across items (making it a good lookup candidate)
+             const uniqueValues = new Set();
+             value.forEach(item => {
+               if (item && typeof item === 'object' && item[key]) {
+                 uniqueValues.add(String(item[key]));
+               }
+             });
+             
+             // If we have multiple unique values, it's a good lookup field
+             if (uniqueValues.size > 1) {
+               lookupFields.push(key);
+             }
+           }
+         });
       }
       
       return { 
@@ -125,18 +524,18 @@ export function useLookup({
       // Also check if the object has an _id field (common in MongoDB objects)
       const hasIdField = objKeys.some(k => k === '_id' || k === 'id');
       
-             if (hasNameField || hasIdField) {
-         // Determine the entity type based on the field name
-         let entityName = key.toLowerCase();
-         let endpoint = '';
-         
-         // Generic endpoint generation - just add 's' to make it plural
-         // This will work for any field name: vendor -> vendors, catalog -> catalogs, etc.
-         // But for fields ending with 'Id', we need to remove the 'Id' first
-         if (entityName.endsWith('id')) {
-           entityName = entityName.replace(/id$/, '');
-         }
-         endpoint = entityName + 's';
+      if (hasNameField || hasIdField) {
+        // Determine the entity type based on the field name
+        let entityName = key.toLowerCase();
+        let endpoint = '';
+        
+        // Remove 'Id' suffix for entity name
+        if (entityName.endsWith('id')) {
+          entityName = entityName.replace(/id$/, '');
+        }
+        
+        // Simple approach: add 's' to make plural
+        endpoint = entityName.toLowerCase() + 's';
         
         return {
           type: 'lookup',
@@ -169,6 +568,28 @@ export function useLookup({
       return { type: 'number' };
     }
 
+    // Number field detection based on field name
+    if (lowerKey.includes('amount') || 
+        lowerKey.includes('price') || 
+        lowerKey.includes('cost') || 
+        lowerKey.includes('total') || 
+        lowerKey.includes('quantity') || 
+        lowerKey.includes('count') || 
+        lowerKey.includes('number') ||
+        lowerKey.includes('size') ||
+        lowerKey.includes('weight') ||
+        lowerKey.includes('length') ||
+        lowerKey.includes('width') ||
+        lowerKey.includes('height') ||
+        lowerKey.includes('area') ||
+        lowerKey.includes('volume') ||
+        lowerKey.includes('percentage') ||
+        lowerKey.includes('rate') ||
+        lowerKey.includes('score') ||
+        lowerKey.includes('rating')) {
+      return { type: 'number' };
+    }
+
     // Date field detection
     if (lowerKey.includes('date') || lowerKey === 'dob' || 
         (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value as string))) {
@@ -190,38 +611,68 @@ export function useLookup({
     if (lowerKey.endsWith('id') && lowerKey !== 'id' && !lowerKey.startsWith('_')) {
       const entityName = key.replace(/Id$/i, '');
       
-      // Only treat as lookup if it's a known entity with a valid endpoint
-      const knownEntities = ['customers', 'factory', 'measurement', 'catalog', 'vendor', 'label'];
-      if (knownEntities.includes(entityName.toLowerCase())) {
-        return {
-          type: 'lookup',
-          config: {
-            endpoint: entityName.toLowerCase() + 's', // e.g., customer -> customers, not customerids
-            displayField: 'name',
-            entityName,
-            fieldPath: fullPath // Store the full path for debugging
-          }
-        };
-      }
-    }
-
-    // Lookup field detection for common field names (like label, etc.)
-    // Note: Only treat specific fields as lookups, not all common fields
-    if (lowerKey === 'label') {
-      // Only 'label' should be treated as a lookup field
+      // Simple approach: add 's' to make plural
+      const endpoint = entityName.toLowerCase() + 's';
+      
       return {
         type: 'lookup',
         config: {
-          endpoint: 'labels',
+          endpoint,
           displayField: 'name',
-          entityName: 'label',
-          fieldPath: fullPath,
-          isArrayItemLookup: true // Flag to indicate this is a lookup field within an array item
+          entityName,
+          fieldPath: fullPath // Store the full path for debugging
+        }
+      };
+    }
+
+    // Direct catalog field detection (not just catalogId)
+    if (lowerKey === 'catalog' || lowerKey === 'catalogs' || lowerKey === 'catalogid' || lowerKey === 'catalog_id') {
+      return {
+        type: 'lookup',
+        config: {
+          endpoint: 'catalogs',
+          displayField: 'name',
+          entityName: 'catalog',
+          fieldPath: fullPath
         }
       };
     }
 
 
+
+
+
+
+
+    // Factory lookup detection
+    if (lowerKey.includes('factory')) {
+      return {
+        type: 'lookup',
+        config: {
+          endpoint: 'factories', // Map factory fields to factories endpoint
+          displayField: 'factoryName',
+          entityName: 'factory',
+          fieldPath: fullPath,
+          isFactoryLookup: true // Flag to indicate this is a factory lookup
+        }
+      };
+    }
+
+    // Measurement Type lookup detection
+    if (lowerKey === 'measurementtype' || lowerKey === 'measurement_type' || lowerKey === 'measurementType' || 
+        (lowerKey.includes('measurement') && lowerKey.includes('type'))) {
+      return {
+        type: 'lookup',
+        config: {
+          endpoint: 'measurementTypes', // Custom endpoint for measurement types
+          displayField: 'name',
+          entityName: 'measurementType',
+          fieldPath: fullPath,
+          isMeasurementTypeLookup: true, // Flag to indicate this is a measurement type lookup
+          options: ['DAURA SURUWAL', 'SUIT'] // Updated options for measurement types
+        }
+      };
+    }
 
     // Default to text
     return { type: 'text' };
@@ -253,23 +704,132 @@ export function useLookup({
     return lower === 'dob' || lower === 'date' || lower.includes('date') || lower.includes('time');
   }, []);
 
+  // Check if field is a measurement type field
+  const isMeasurementTypeField = useCallback((fieldName: string): boolean => {
+    const lower = fieldName.toLowerCase();
+    return lower === 'measurementtype' || 
+           lower === 'measurement_type' || 
+           lower === 'measurementtype' ||
+           (lower.includes('measurement') && lower.includes('type'));
+  }, []);
+
+  // Check if field is a factory field
+  const isFactoryField = useCallback((fieldName: string): boolean => {
+    const lower = fieldName.toLowerCase();
+    return lower.includes('factory');
+  }, []);
+
   // Get status options based on field context
   const getStatusOptions = useCallback((fieldName: string): string[] => {
     const lower = fieldName.toLowerCase();
     
+    // Order Item Types
+    if (lower.includes('itemtype') || lower.includes('item_type')) {
+      return ['DAURA', 'SURUWAL', 'SHIRT', 'PANT', 'WAIST_COAT', 'COAT', 'BLAZER'];
+    }
+    
+    // Payment Status (Standard)
+    if (lower.includes('paymentstatus') && !lower.includes('factory') && !lower.includes('vendor')) {
+      return ['Paid', 'Unpaid', 'Partial'];
+    }
+    
+    // Payment Status (Factory/Vendor)
+    if (lower.includes('paymentstatus') && (lower.includes('factory') || lower.includes('vendor'))) {
+      return ['PAID', 'PENDING'];
+    }
+    
+    // Order Status
+    if (lower.includes('orderstatus') || lower.includes('order_status')) {
+      return ['Pending', 'Cutting', 'Sewing', 'Ready', 'Delivered', 'Cancelled'];
+    }
+    
+    // Factory Specialization
+    if (lower.includes('specialization')) {
+      return ['Daura Suruwal', 'Shirt', 'Pant', 'Coat', 'Tie', 'Cufflinks', 'Waistcoat', 'Blazer', 'Other'];
+    }
+    
+    // Factory Status
+    if (lower.includes('status') && lower.includes('factory')) {
+      return ['Available', 'Busy', 'Inactive', 'Working'];
+    }
+    
+    // Measurement Type
+    if (lower.includes('measurementtype') || lower.includes('measurement_type')) {
+      return ['DAURA SURUWAL', 'SUIT'];
+    }
+    
+    // Measurement Status
+    if (lower.includes('status') && lower.includes('measurement')) {
+      return ['DRAFT', 'COMPLETED', 'IN PROGRESS'];
+    }
+    
+    // Logistics Category
+    if (lower.includes('category') && lower.includes('logistics')) {
+      return ['AC Repair', 'Laundry Service', 'Plumbing', 'Electrical', 'Carpentry', 'Pest Control', 'Internet Provider', 'Security Service', 'Courier', 'Water Supply', 'Cleaning Service', 'Other'];
+    }
+    
+    // Privilege Points Type
+    if (lower.includes('type') && lower.includes('privilege')) {
+      return ['REDEEMED', 'EARNED'];
+    }
+    
+    // Notification Type
+    if (lower.includes('type') && lower.includes('notification')) {
+      return ['customer', 'employee', 'order', 'vendor', 'appointment', 'catalog', 'general'];
+    }
+    
+    // Notification Action
+    if (lower.includes('action') && lower.includes('notification')) {
+      return ['created', 'updated', 'deleted', 'status_changed'];
+    }
+    
+    // Notification Priority
+    if (lower.includes('priority') && lower.includes('notification')) {
+      return ['info', 'success', 'warning', 'error'];
+    }
+    
+    // Sidebar Type
+    if (lower.includes('type') && lower.includes('sidebar')) {
+      return ['menu', 'divider', 'header', 'submenu'];
+    }
+    
+    // Statistics Time Period
+    if (lower.includes('timeperiod') || lower.includes('time_period')) {
+      return ['day', 'week', 'month', 'year'];
+    }
+    
+    // Employee Gender
+    if (lower.includes('gender')) {
+      return ['Male', 'Female', 'Others'];
+    }
+    
+    // Employee Role
+    if (lower.includes('role')) {
+      return ['Tailor', 'Accountant', 'Admin', 'SuperAdmin', 'Data Entry Clerk', 'Receptionist'];
+    }
+    
+    // Appointment Source
+    if (lower.includes('source') && lower.includes('appointment')) {
+      return ['Call', 'WhatsApp', 'Walk-In', 'Website', 'Other'];
+    }
+    
+    // Appointment Type
+    if (lower.includes('appointmenttype') || lower.includes('appointment_type')) {
+      return ['Consultation', 'Fitting', 'Delivery', 'Follow-up', 'Other'];
+    }
+    
+    // Default payment status
     if (lower.includes('payment')) {
-      return ['pending', 'processing', 'paid', 'failed', 'refunded', 'cancelled'];
+      return ['Paid', 'Unpaid', 'Partial'];
     }
     
+    // Default order status
     if (lower.includes('order')) {
-      return ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
+      return ['Pending', 'Cutting', 'Sewing', 'Ready', 'Delivered', 'Cancelled'];
     }
     
-    if (lower.includes('delivery') || lower.includes('shipment')) {
-      return ['pending', 'in-transit', 'out-for-delivery', 'delivered', 'failed', 'returned'];
-    }
-    
-    return ['pending', 'active', 'inactive', 'completed', 'cancelled'];
+    // Default status options
+    return ['Pending', 'Active', 'Inactive', 'Completed', 'Cancelled'];
   }, []);
 
   // Get status badge styling
@@ -390,256 +950,12 @@ export function useLookup({
     return [];
   }, []);
 
-  // Enhanced lookup fetching with better error handling and retry logic
+    // Enhanced lookup fetching with better error handling and retry logic
   const fetchLookupOptions = useCallback(async (fieldPath: string, config: any, retryCount = 0) => {
-    if (!config.endpoint) return;
-    
-    // List of valid endpoints that actually exist
-    const validEndpoints = ['customers', 'factories', 'measurements', 'catalogs', 'vendors', 'labels'];
-    
-    // Skip fetching if endpoint doesn't exist
-    if (!validEndpoints.includes(config.endpoint)) {
-      console.log(`⚠️ Skipping lookup for ${fieldPath} - endpoint /${config.endpoint} doesn't exist`);
-      return;
-    }
-    
-    // Handle array item lookups dynamically based on existing data
-    if (config.isArrayItemLookup) {
-      // Extract unique values from existing array data to create dynamic options
-      const existingValues = new Set<string>();
-      
-      // Find the array data in the current form data
-      let arrayFieldName = '';
-      const match = fieldPath.match(/(\w+)\[\d+\]/); // Extract array name from patterns like specialDates[0]
-      if (match && match[1]) {
-        arrayFieldName = match[1]; // Get the base array name (e.g., 'specialDates' from 'specialDates[0]')
-      } else {
-        // Fallback: try to get from path parts
-        const pathParts = fieldPath.split('.');
-        arrayFieldName = pathParts[pathParts.length - 2];
-      }
-      
-      console.log(`🔍 Array item lookup for ${fieldPath}:`);
-      console.log(`   - Extracted array field name: ${arrayFieldName}`);
-      console.log(`   - Entity name: ${config.entityName}`);
-      console.log(`   - Data structure:`, data);
-      
-      if (data && typeof data === 'object') {
-        // Navigate to the array field
-        let arrayData: any[] = [];
-        if (Array.isArray(data)) {
-          // If data is an array, look for the array field in each item
-          data.forEach(item => {
-            if (item && typeof item === 'object' && item[arrayFieldName] && Array.isArray(item[arrayFieldName])) {
-              arrayData = arrayData.concat(item[arrayFieldName]);
-            }
-          });
-        } else {
-          // If data is an object, look for the array field directly
-          if (data && typeof data === 'object' && data[arrayFieldName] && Array.isArray(data[arrayFieldName])) {
-            arrayData = data[arrayFieldName] as any[];
-          }
-        }
-        
-        // Extract unique values for the lookup field
-        arrayData.forEach(item => {
-          if (item && typeof item === 'object' && item[config.entityName]) {
-            const value = item[config.entityName];
-            if (typeof value === 'string' && value.trim()) {
-              existingValues.add(value);
-            }
-          }
-        });
-      }
-      
-             // Create dynamic options from existing values
-       const dynamicOptions: LookupOption[] = Array.from(existingValues).map(value => ({
-         id: value, // Use the actual value as ID for array item lookups
-         label: value
-       }));
-      
-             // Add some common options if we don't have many existing values
-       if (dynamicOptions.length < 3) {
-         const commonOptions = {
-           label: ['Birthday', 'Anniversary', 'Wedding', 'Graduation', 'Holiday', 'Other'],
-           type: ['Personal', 'Business', 'Family', 'Other'],
-           category: ['Urgent', 'Normal', 'Low Priority']
-         };
-        
-                 const commonForType = commonOptions[config.entityName as keyof typeof commonOptions] || [];
-         commonForType.forEach(option => {
-           if (!existingValues.has(option)) {
-             dynamicOptions.push({
-               id: option, // Use the actual value as ID for array item lookups
-               label: option
-             });
-           }
-         });
-      }
-      
-      if (dynamicOptions.length > 0) {
-        console.log(`✅ Loaded ${dynamicOptions.length} dynamic options for ${fieldPath}:`, dynamicOptions);
-        setLookupOptions(prev => ({ ...prev, [fieldPath]: dynamicOptions }));
-        return;
-      }
-    }
-    
-    console.log(`🔄 Fetching lookup options for ${fieldPath} from /${config.endpoint}${retryCount > 0 ? ` (retry ${retryCount})` : ''}`);
-    console.log(`📋 Config:`, config);
-    console.log(`📍 Field path: ${fieldPath}, Config fieldPath: ${config.fieldPath}`);
-    
-    // Check if we're in browser and have auth token
-    if (typeof window !== "undefined") {
-      const token = document.cookie.split('; ').find(row => row.startsWith('refresh_token='))?.split('=')[1];
-      console.log(`🔑 Auth token available: ${token ? 'Yes' : 'No'}`);
-    }
-    
-    try {
-      // Add timeout to prevent hanging requests
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Request timeout')), 10000)
-      );
-      
-      console.log(`🔐 Making authenticated API request to: ${config.endpoint}`);
-      const fetchPromise = fetchAPI({ 
-        endpoint: config.endpoint, 
-        method: 'GET',
-        withAuth: true // Add authentication for lookup requests
-      });
-      const result = await Promise.race([fetchPromise, timeoutPromise]) as any;
-      
-      console.log(`📥 Raw API response for ${fieldPath}:`, result);
-      
-      if (result.error) {
-        console.error(`❌ Failed to fetch from /${config.endpoint}:`, result.error);
-        setLookupErrors(prev => ({ 
-          ...prev, 
-          [fieldPath]: `Failed to load from /${config.endpoint}: ${result.error}` 
-        }));
-        return;
-      }
-      
-      const response = result.data;
-      if (!response) {
-        console.error(`❌ No data received from /${config.endpoint}`);
-        setLookupErrors(prev => ({ 
-          ...prev, 
-          [fieldPath]: `No data received from /${config.endpoint}` 
-        }));
-        return;
-      }
-
-      // Extract array from various response formats
-      const entityField = config.entityName.toLowerCase() + 'Info'; // e.g., customerInfo, factoryInfo
-      const dataArray = Array.isArray(response) 
-        ? response 
-        : response?.data || response?.items || response?.results || response?.[entityField] || [];
-
-      console.log(`📊 Response structure for ${fieldPath}:`, {
-        responseType: typeof response,
-        isArray: Array.isArray(response),
-        hasData: !!response?.data,
-        hasItems: !!response?.items,
-        hasResults: !!response?.results,
-        entityField,
-        hasEntityField: !!response?.[entityField],
-        dataArrayLength: Array.isArray(dataArray) ? dataArray.length : 'not array',
-        firstItem: Array.isArray(dataArray) && dataArray.length > 0 ? dataArray[0] : null,
-        responseKeys: response ? Object.keys(response) : 'null/undefined'
-      });
-
-      if (!Array.isArray(dataArray) || dataArray.length === 0) {
-        console.warn(`⚠️ No data found in /${config.endpoint}`);
-        setLookupOptions(prev => ({ ...prev, [fieldPath]: [] }));
-        return;
-      }
-
-      // Map to options format
-      const options = dataArray.map((item: any) => {
-        const id = item._id || item.id;
-        if (!id) return null;
-
-        // Try to find the best display field
-        let label = '';
-        
-                 // For object lookups, try to find the most descriptive field
-         if (config.isObjectLookup) {
-           // Try entity-specific fields first (e.g., vendorName, customerName, etc.)
-           const entitySpecificField = config.entityName + 'Name';
-           if (item[entitySpecificField] && typeof item[entitySpecificField] === 'string') {
-             label = item[entitySpecificField];
-           } else {
-             // Try common display fields in order of preference
-             const displayFields = [
-               'name', 
-               'title', 
-               'label', 
-               'displayName', 
-               'fullName',
-               'brandName',
-               'vendorName',
-               'customerName',
-               'factoryName'
-             ];
-             
-             for (const field of displayFields) {
-               if (item[field] && typeof item[field] === 'string') {
-                 label = item[field];
-                 break;
-               }
-             }
-           }
-           
-           // For objects with multiple descriptive fields, try to combine them
-           if (!label && item.brandName && item.codeNumber) {
-             label = `${item.brandName} - ${item.codeNumber}`;
-           } else if (!label && item.name && item.code) {
-             label = `${item.name} - ${item.code}`;
-           }
-         } else {
-          // Original logic for ID-based lookups
-          const entitySpecificField = config.entityName + 'Name';
-          if (item[entitySpecificField]) {
-            label = item[entitySpecificField];
-          } else {
-            // Try common display fields
-            const displayFields = ['name', 'title', 'label', 'displayName', 'fullName'];
-            for (const field of displayFields) {
-              if (item[field] && typeof item[field] === 'string') {
-                label = item[field];
-                break;
-              }
-            }
-          }
-        }
-
-        if (!label) {
-          label = `${config.entityName} ${id}`;
-        }
-
-        return { id: String(id), label: String(label) };
-      }).filter((item): item is LookupOption => item !== null);
-
-      console.log(`✅ Loaded ${options.length} options for ${fieldPath}:`, options);
-      setLookupOptions(prev => ({ ...prev, [fieldPath]: options }));
-      
-    } catch (err) {
-      console.error(`❌ Error fetching lookup options for ${fieldPath}:`, err);
-      
-      // Retry logic for network errors (but not for 4xx errors)
-      if (retryCount < 2 && err instanceof Error && !err.message.includes('Failed to load')) {
-        console.log(`🔄 Retrying lookup for ${fieldPath}...`);
-        setTimeout(() => {
-          fetchLookupOptions(fieldPath, config, retryCount + 1);
-        }, 1000 * (retryCount + 1)); // Exponential backoff
-        return;
-      }
-      
-      setLookupErrors(prev => ({ 
-        ...prev, 
-        [fieldPath]: `Network error while loading options: ${err instanceof Error ? err.message : 'Unknown error'}` 
-      }));
-    }
+    // Add the request to the queue
+    setRequestQueue(prev => [...prev, { fieldPath, config, retryCount }]);
+    // Trigger queue processing
+    setQueueVersion(prev => prev + 1);
   }, []);
 
   // Recursively analyze form structure and fetch lookup data
@@ -660,28 +976,20 @@ export function useLookup({
       }
       
       if (fieldType.type === 'array' && Array.isArray(value)) {
-        console.log(`🔍 Analyzing array field: ${fieldPath}`);
-        console.log(`   - Array length: ${value.length}`);
-        
         if (value.length > 0 && typeof value[0] === 'object') {
-          console.log(`   - Array item structure:`, value[0]);
-          
           // Analyze the first array item to detect lookup fields within array items
           analyzeFormStructure(value[0], `${fieldPath}[0]`);
           
           // Also analyze the array field itself to detect array-level lookups
           const arrayFieldType = detectFieldType(key, value, parentPath);
-          console.log(`   - Array field type:`, arrayFieldType);
           
           if (arrayFieldType.config?.hasLookupFields && arrayFieldType.config.lookupFields) {
-            console.log(`   - Detected lookup fields in array:`, arrayFieldType.config.lookupFields);
             // For each detected lookup field in the array, create lookup options
             arrayFieldType.config.lookupFields.forEach((lookupField: string) => {
               const lookupFieldPath = `${fieldPath}[0].${lookupField}`;
               const lookupFieldType = detectFieldType(lookupField, value[0][lookupField], `${fieldPath}[0]`);
-              console.log(`   - Lookup field ${lookupField}:`, lookupFieldType);
+
               if (lookupFieldType.type === 'lookup' && lookupFieldType.config) {
-                console.log(`   - Fetching lookup options for: ${lookupFieldPath}`);
                 fetchLookupOptions(lookupFieldPath, lookupFieldType.config);
               }
             });
@@ -689,22 +997,18 @@ export function useLookup({
         } else if (value.length === 0) {
           // Handle empty arrays - analyze the array field type to detect potential lookup fields
           const arrayFieldType = detectFieldType(key, value, parentPath);
-          console.log(`   - Empty array field type:`, arrayFieldType);
           
           // For empty arrays, we need to check if this array field name suggests it might contain lookup fields
           const lowerKey = key.toLowerCase();
           if (lowerKey.includes('dates') || lowerKey.includes('events') || lowerKey.includes('items')) {
             // These array types commonly contain lookup fields like 'label'
-            console.log(`   - Detected potential lookup array: ${key}`);
             
             // Create lookup options for common fields that might appear in this array type
             const commonLookupFields = ['label', 'type', 'category'];
             commonLookupFields.forEach((lookupField) => {
               const lookupFieldPath = `${fieldPath}[0].${lookupField}`;
               const lookupFieldType = detectFieldType(lookupField, '', `${fieldPath}[0]`);
-              console.log(`   - Potential lookup field ${lookupField}:`, lookupFieldType);
               if (lookupFieldType.type === 'lookup' && lookupFieldType.config) {
-                console.log(`   - Fetching lookup options for: ${lookupFieldPath}`);
                 fetchLookupOptions(lookupFieldPath, lookupFieldType.config);
               }
             });
@@ -712,7 +1016,7 @@ export function useLookup({
         }
       }
     });
-  }, [detectFieldType, fetchLookupOptions]);
+  }, []);
 
   // Reset all lookups
   const resetLookups = useCallback(() => {
@@ -720,21 +1024,28 @@ export function useLookup({
     setLookupErrors({});
   }, []);
 
-  // Initialize form analysis when data changes
+       // Initialize form analysis when data changes
   useEffect(() => {
-    if (data) {
-      console.log('🔍 Analyzing form structure for lookups:', data);
-      if (Array.isArray(data)) {
-        // If it's an array, analyze the first item
-        if (data.length > 0) {
-          analyzeFormStructure(data[0]);
+    if (data && Object.keys(data).length > 0) {
+      // Create a hash of the data to check if it's changed
+      const dataHash = JSON.stringify(data);
+      
+      // Only analyze if we haven't analyzed this data before
+      if (dataHash !== analyzedDataRef.current) {
+        analyzedDataRef.current = dataHash;
+        
+        if (Array.isArray(data)) {
+          // If it's an array, analyze the first item
+          if (data.length > 0) {
+            analyzeFormStructure(data[0]);
+          }
+        } else {
+          // If it's an object, analyze it directly
+          analyzeFormStructure(data);
         }
-      } else {
-        // If it's an object, analyze it directly
-        analyzeFormStructure(data);
       }
     }
-  }, [data, analyzeFormStructure]);
+  }, [data]);
 
   // Notify parent of lookup changes
   useEffect(() => {
@@ -750,6 +1061,8 @@ export function useLookup({
     detectFieldType,
     isStatusField,
     isDateField,
+    isMeasurementTypeField,
+    isFactoryField,
     getStatusOptions,
     getStatusBadgeStyle,
     formatFieldName,

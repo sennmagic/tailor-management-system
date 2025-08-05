@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3, TrendingUp, Users, ShoppingCart, DollarSign, Calendar, Package, Truck, Factory, FileText, Filter, BarChart, LineChart, PieChart } from "lucide-react";
@@ -31,7 +31,7 @@ interface StatisticsChartProps {
 type ChartType = 'area' | 'bar' | 'line' | 'pie';
 type TimeRange = '7d' | '30d' | '3m' | '6m' | '12m' | 'all';
 
-export function StatisticsChart({ data, slug, className = "", loading = false, error = null }: StatisticsChartProps) {
+const StatisticsChart = React.memo(function StatisticsChart({ data, slug, className = "", loading = false, error = null }: StatisticsChartProps) {
   const [chartType, setChartType] = useState<ChartType>('area');
   const [timeRange, setTimeRange] = useState<TimeRange>('12m');
   const [selectedMetric, setSelectedMetric] = useState<string>('all');
@@ -396,4 +396,6 @@ export function StatisticsChart({ data, slug, className = "", loading = false, e
       </Card>
     );
   }
-} 
+});
+
+export { StatisticsChart } 

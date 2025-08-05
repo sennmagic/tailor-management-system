@@ -727,6 +727,7 @@ export function DynamicForm({
       e.preventDefault();
       
       // Use the filterSubmitFields function from useLookup hook
+      // This ensures only relevant fields are submitted for both POST and PATCH operations
       const cleanedFormState = filterSubmitFields(formState);
       
       console.log('Submitting cleaned form state:', cleanedFormState);

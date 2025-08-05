@@ -22,7 +22,7 @@ interface NotificationListProps {
   maxHeight?: string;
 }
 
-export function NotificationList({ className = '', maxHeight = '600px' }: NotificationListProps) {
+const NotificationList = React.memo(function NotificationList({ className = '', maxHeight = '600px' }: NotificationListProps) {
   const {
     notifications,
     unreadCount,
@@ -286,4 +286,6 @@ export function NotificationList({ className = '', maxHeight = '600px' }: Notifi
       )}
     </div>
   );
-} 
+});
+
+export { NotificationList } 

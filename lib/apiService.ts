@@ -5,7 +5,7 @@ export interface APIResponse<T> {
   data: T;
   message?: string;
   success?: boolean;
-  tokens?: {
+tokens?: {
     access_token?: string;
     refresh_token?: string;
   };
@@ -89,6 +89,12 @@ export const fetchAPI = async <TResponse = any, TData = unknown>({
   }
 
   try {
+    console.log('🌐 API Request:', { url, method, headers, data })
+    
+    const controller = new AbortController()
+    // Reduce timeout to 15 seconds for better UX
+    const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+    
     const response = await fetch(url, {
       method,
       headers,
@@ -100,7 +106,11 @@ export const fetchAPI = async <TResponse = any, TData = unknown>({
           : undefined,
       next: { revalidate: revalidateSeconds },
       credentials: "include",
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId)
+    console.log('🌐 API Response Status:', response.status, response.statusText)
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -111,7 +121,22 @@ export const fetchAPI = async <TResponse = any, TData = unknown>({
     const json = await response.json();
     return { data: json, error: null };
   } catch (error: any) {
-    return { data: null, error: error?.message || "Unknown error" };
+    console.error('🌐 API Error:', error)
+    
+    // Handle different types of network errors
+    if (error.name === 'AbortError') {
+      return { data: null, error: "Request timed out after 15 seconds" };
+    }
+    
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      return { data: null, error: "Network error - please check your connection" };
+    }
+    
+    if (error.message?.includes('Failed to fetch')) {
+      return { data: null, error: "Unable to connect to server - please check your internet connection" };
+    }
+    
+    return { data: null, error: error?.message || "Network error occurred" };
   }
 };
 
@@ -201,4 +226,14 @@ export function useAPIMutation<TResponse = any, TData = unknown>(
     isSuccess: mutation.isSuccess,
     isError: mutation.isError,
   };
+}
+
+// Test function to check API connectivity
+export async function testAPIConnectivity(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const result = await fetchAPI({ endpoint: 'customers', method: 'GET' });
+    return { success: !result.error, error: result.error || undefined };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
 }
