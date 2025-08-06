@@ -676,7 +676,7 @@ export function OrderForm({
                     const newArray = [...arrayItems, newItem]
                     handleFieldChange(fieldName, newArray)
                   }}
-                  className="flex items-center gap-2 bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                  className="flex items-center gap-2 bg-primary-50 hover:bg-primary-100 text-primary-700 border-primary-200"
                 >
                   <Plus className="h-4 w-4" />
                   Add Item
@@ -1040,7 +1040,7 @@ export function OrderForm({
       <div className="fixed top-4 right-4 z-50">
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
             <span className="ml-3 text-lg">Loading order form...</span>
           </div>
         </div>
@@ -1058,7 +1058,7 @@ export function OrderForm({
       <div className="fixed top-4 right-4 z-50">
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
             <span className="ml-3 text-lg">Loading order form...</span>
           </div>
         </div>
@@ -1072,7 +1072,7 @@ export function OrderForm({
       <div className="fixed top-4 right-4 z-50">
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
             <span className="ml-3 text-lg">Loading order form...</span>
           </div>
         </div>
@@ -1089,14 +1089,14 @@ export function OrderForm({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-green-500 rounded-lg shadow-sm">
+            <div className="p-3 bg-primary rounded-lg shadow-sm">
               <Package className="h-6 w-6 text-white" />
             </div>
             <div>
               <h2 className="text-xl font-bold text-gray-900">
                 {mode === 'create' ? 'Create New Order' : 'Edit Order'}
               </h2>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-gray mt-1">
                 {mode === 'create' ? 'Fill in the details to create a new order' : 'Update the order information'}
               </p>
             </div>
@@ -1128,8 +1128,8 @@ export function OrderForm({
                     onClick={() => setActiveTab(tab.id)}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors relative ${
                       activeTab === tab.id
-                        ? 'bg-white text-green-600 shadow-sm border border-gray-200'
-                        : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                        ? 'bg-white text-primary shadow-sm border border-gray-200'
+                        : 'text-gray hover:text-gray-800 hover:bg-gray-100'
                     }`}
                     style={{
                       animation: isErrorTab && hasErrors ? 'blink 1.5s ease-in-out infinite' : 'none',
@@ -1184,7 +1184,7 @@ export function OrderForm({
 
           {/* Footer */}
           <div className="flex items-center justify-between p-6 border-t border-gray-200">
-            <div className="flex items-center gap-2 text-sm text-gray-600">
+            <div className="flex items-center gap-2 text-sm text-gray">
               <span>{mode === 'create' ? 'Creating new order' : 'Updating order'}</span>
             </div>
             <div className="flex gap-3">
