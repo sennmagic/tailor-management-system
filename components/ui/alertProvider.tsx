@@ -3,9 +3,20 @@ import { createContext, useContext, useState, ReactNode, useEffect } from "react
 import { Alert } from "@/components/ui/alert";
 import { X } from "lucide-react";
 
-type AlertVariant = "success" | "destructive";
+type AlertVariant = "success" | "destructive" | "info" | "warning";
 
-const AlertContext = createContext<{ showAlert: (msg: string, variant?: AlertVariant) => void } | undefined>(undefined);
+interface AlertConfig {
+  msg: string;
+  variant: AlertVariant;
+  duration?: number;
+  sound?: boolean;
+  speech?: boolean;
+}
+
+const AlertContext = createContext<{ 
+  showAlert: (config: string | AlertConfig, variant?: AlertVariant) => void;
+  hideAlert: () => void;
+} | undefined>(undefined);
 
 export function useAlert() {
   const ctx = useContext(AlertContext);
@@ -13,194 +24,239 @@ export function useAlert() {
   return ctx;
 }
 
-// Sound effects for different alert types
-const playSound = (type: 'success' | 'update' | 'error') => {
+// Simple clean sounds
+const playSound = (type: AlertVariant) => {
   try {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
+    const audio = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
     
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
+    osc.connect(gain);
+    gain.connect(audio.destination);
     
-    switch (type) {
-      case 'success':
-        // Pleasant ascending tone for general success
-        oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.2);
-        break;
-      case 'update':
-        // Special sound for update success - two quick beeps
-        oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(1000, audioContext.currentTime + 0.1);
-        break;
-      case 'error':
-        // Descending tone for errors
-        oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.3);
-        break;
-    }
+    osc.frequency.value = type === 'success' ? 800 : type === 'warning' ? 600 : 400;
+    gain.gain.value = 0.05;
     
-    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.3);
-  } catch (error) {
-    console.log('Sound playback not supported');
-  }
+    osc.start();
+    setTimeout(() => osc.stop(), 100);
+  } catch {}
 };
 
-// Enhanced message processing for voice-over with better Nepali
-const processMessageForSpeech = (message: string, variant: AlertVariant): string => {
-  let processedMessage = message;
-  
-  // Handle validation errors with better Nepali voice-over
-  if (message.toLowerCase().includes('required') || message.toLowerCase().includes('validation')) {
-    if (message.toLowerCase().includes('customer')) {
-      processedMessage = 'ग्राहक फिल्ड भर्नुपर्छ। कृपया ग्राहक छान्नुहोस्।';
-    } else if (message.toLowerCase().includes('factory')) {
-      processedMessage = 'कारखाना फिल्ड भर्नुपर्छ। कृपया कारखाना छान्नुहोस्।';
-    } else if (message.toLowerCase().includes('measurement')) {
-      processedMessage = 'मापन फिल्ड भर्नुपर्छ। कृपया मापन छान्नुहोस्।';
-    } else if (message.toLowerCase().includes('catalog')) {
-      processedMessage = 'क्याटलग आइटम भर्नुपर्छ। कृपया क्याटलग आइटम छान्नुहोस्।';
-    } else {
-      processedMessage = 'कृपया सबै आवश्यक फिल्डहरू भर्नुहोस्।';
+// Smart message processing - keeps original errors, translates common patterns
+const processMessage = (message: string, variant: AlertVariant): string => {
+  // For errors, keep the original service message but add Nepali context if needed
+  if (variant === 'destructive') {
+    // If it's already in Nepali or a clear error message, keep it as-is
+    if (message.includes('छ') || message.includes('भयो') || message.length > 50) {
+      return message;
     }
+    
+    // Add Nepali context to short English errors
+    const msg = message.toLowerCase();
+    if (msg.includes('network') || msg.includes('connection')) {
+      return `${message} (इन्टरनेट जडान समस्या)`;
+    }
+    if (msg.includes('server') || msg.includes('500')) {
+      return `${message} (सर्भर समस्या)`;
+    }
+    if (msg.includes('unauthorized') || msg.includes('403')) {
+      return `${message} (अनुमति छैन)`;
+    }
+    if (msg.includes('not found') || msg.includes('404')) {
+      return `${message} (फेला परेन)`;
+    }
+    if (msg.includes('timeout')) {
+      return `${message} (समय सकियो)`;
+    }
+    if (msg.includes('validation') || msg.includes('invalid')) {
+      return `${message} (गलत जानकारी)`;
+    }
+    
+    // For unknown errors, show original message with generic Nepali help
+    return `${message} (समस्या भयो)`;
   }
   
-  // Handle success messages with better Nepali
+  // Form validation - Natural Nepali
+  if (message.toLowerCase().includes('required') && variant !== 'destructive') {
+    const msg = message.toLowerCase();
+    if (msg.includes('customer')) return 'ग्राहकको नाम लेख्नुहोस्';
+    if (msg.includes('factory')) return 'कारखानाको नाम छान्नुहोस्';
+    if (msg.includes('measurement')) return 'साइज राख्नुहोस्';
+    if (msg.includes('catalog')) return 'सामानको सूची छान्नुहोस्';
+    if (msg.includes('email')) return 'इमेल ठेगाना लेख्नुहोस्';
+    if (msg.includes('phone')) return 'फोन नम्बर राख्नुहोस्';
+    if (msg.includes('name')) return 'नाम लेख्नुहोस्';
+    if (msg.includes('address')) return 'ठेगाना लेख्नुहोस्';
+    if (msg.includes('date')) return 'मिति छान्नुहोस्';
+    if (msg.includes('quantity')) return 'संख्या राख्नुहोस्';
+    return 'सबै जानकारी भर्नुहोस्';
+  }
+  
+  // Success messages - Natural flow
   if (variant === 'success') {
-    if (message.toLowerCase().includes('update')) {
-      processedMessage = 'अर्डर सफलतापूर्वक अपडेट भयो।';
-    } else if (message.toLowerCase().includes('create')) {
-      processedMessage = 'अर्डर सफलतापूर्वक सिर्जना भयो।';
-    }
+    const msg = message.toLowerCase();
+    if (msg.includes('update')) return 'जानकारी अपडेट भयो';
+    if (msg.includes('create') || msg.includes('add')) return 'नयाँ जानकारी थपियो';
+    if (msg.includes('save')) return 'जानकारी सुरक्षित भयो';
+    if (msg.includes('delete')) return 'जानकारी मिटाइयो';
+    if (msg.includes('upload')) return 'फाइल अपलोड भयो';
+    if (msg.includes('send')) return 'सन्देश पठाइयो';
+    if (msg.includes('login')) return 'लगइन सफल भयो';
+    if (msg.includes('register')) return 'दर्ता सफल भयो';
+    return 'काम सकियो';
   }
   
-  return processedMessage;
+  // Warning messages
+  if (variant === 'warning') {
+    const msg = message.toLowerCase();
+    if (msg.includes('confirm')) return 'निश्चित गर्नुहोस्';
+    if (msg.includes('delete')) return 'मिटाउन चाहनुहुन्छ?';
+    if (msg.includes('logout')) return 'बाहिर निस्कनुहुन्छ?';
+    if (msg.includes('unsaved')) return 'परिवर्तन सुरक्षित गरेको छैन';
+    return message; // Keep original warning message
+  }
+  
+  // Info messages
+  if (variant === 'info') {
+    const msg = message.toLowerCase();
+    if (msg.includes('loading')) return 'लोड गर्दैछ, पर्खनुहोस्';
+    if (msg.includes('processing')) return 'प्रक्रिया चलिरहेको छ';
+    if (msg.includes('connecting')) return 'जडान गर्दैछ';
+    return message; // Keep original info message
+  }
+  
+  // Default: return original message
+  return message;
 };
 
-// Voice-over functionality using Web Speech API with better Nepali support
-const speakMessage = (message: string, variant: AlertVariant) => {
-  try {
-    if ('speechSynthesis' in window) {
-      // Stop any currently speaking
-      window.speechSynthesis.cancel();
+// Better speech - more natural Nepali pronunciation
+const speakInNepali = (text: string, variant: AlertVariant) => {
+  if (!window.speechSynthesis) return;
+  
+  window.speechSynthesis.cancel();
+  
+  const utterance = new SpeechSynthesisUtterance(text);
+  
+  // Slower, clearer speech settings for better Nepali pronunciation
+  utterance.rate = 0.6; // Much slower for clarity
+  utterance.pitch = variant === 'success' ? 1.1 : variant === 'destructive' ? 0.9 : 1.0;
+  utterance.volume = 0.8;
+  
+  // Wait for voices to load, then find best Nepali voice
+  const setVoice = () => {
+    const voices = window.speechSynthesis.getVoices();
+    
+    // Priority: Real Nepali → Hindi → English (India) → Any clear voice
+    const nepaliVoice = voices.find(voice => {
+      const name = voice.name.toLowerCase();
+      const lang = voice.lang.toLowerCase();
       
-      const utterance = new SpeechSynthesisUtterance(message);
+      // Look for actual Nepali voices first
+      if (lang.includes('ne-np') || name.includes('nepali')) return true;
       
-      // Configure voice settings for faster Nepali speech
-      if (variant === 'success') {
-        utterance.rate = 0.8; // Faster for success messages
-        utterance.pitch = 1.0; // Normal pitch
-        utterance.volume = 1.0; // Full volume
-      } else {
-        utterance.rate = 0.7; // Faster for error messages
-        utterance.pitch = 1.0; // Normal pitch
-        utterance.volume = 1.0; // Full volume
+      // Then Hindi voices which can handle Devanagari
+      if (lang.includes('hi-in') && name.includes('google')) return true;
+      
+      // English India voices are often clearer for mixed content
+      if (lang.includes('en-in') && name.includes('google')) return true;
+      
+      return false;
+    });
+    
+    // Fallback to clearest English voice
+    const clearVoice = voices.find(voice => 
+      voice.name.includes('Google UK English Female') ||
+      voice.name.includes('Microsoft Zira') ||
+      voice.name.includes('Alex')
+    );
+    
+    if (nepaliVoice) {
+      utterance.voice = nepaliVoice;
+      utterance.lang = nepaliVoice.lang;
+      // Even slower for non-native voices
+      if (!nepaliVoice.lang.includes('ne')) {
+        utterance.rate = 0.5;
       }
-      
-      // Try to use Nepali voice or fallback to available voices
-      const voices = window.speechSynthesis.getVoices();
-      
-      // Look for Nepali voice first with better detection
-      const nepaliVoice = voices.find(voice => 
-        voice.lang.includes('ne') || 
-        voice.lang.includes('hi') || // Hindi as fallback
-        voice.name.toLowerCase().includes('nepali') ||
-        voice.name.toLowerCase().includes('hindi') ||
-        voice.name.toLowerCase().includes('india') ||
-        voice.name.toLowerCase().includes('google') ||
-        voice.name.toLowerCase().includes('microsoft')
-      );
-      
-      // Fallback to clear English voice if Nepali not available
-      const clearEnglishVoice = voices.find(voice => 
-        voice.name.includes('Samantha') ||
-        voice.name.includes('Google UK English Female') ||
-        voice.name.includes('Microsoft Zira') ||
-        voice.name.includes('Alex') ||
-        voice.name.includes('Google US English Female')
-      );
-      
-      if (nepaliVoice) {
-        utterance.voice = nepaliVoice;
-        utterance.lang = 'ne-NP'; // Set Nepali language
-      } else if (clearEnglishVoice) {
-        utterance.voice = clearEnglishVoice;
-        utterance.lang = 'en-US'; // Fallback to English
-        // For English fallback, use faster rate
-        utterance.rate = 0.6;
-      }
-      
-      // Add event listeners for better control
-      utterance.onstart = () => {
-        console.log('Speech started');
-      };
-      
-      utterance.onend = () => {
-        console.log('Speech ended');
-      };
-      
-      utterance.onerror = (event) => {
-        console.log('Speech error:', event);
-      };
-      
-      window.speechSynthesis.speak(utterance);
+    } else if (clearVoice) {
+      utterance.voice = clearVoice;
+      utterance.rate = 0.5; // Very slow for English voices reading Nepali
     }
-  } catch (error) {
-    console.log('Speech synthesis not supported');
+  };
+  
+  // Handle voices loading
+  if (window.speechSynthesis.getVoices().length > 0) {
+    setVoice();
+  } else {
+    window.speechSynthesis.onvoiceschanged = () => {
+      setVoice();
+      window.speechSynthesis.onvoiceschanged = null;
+    };
   }
+  
+  // Add pauses for better pronunciation
+  const textWithPauses = text.replace(/[।,]/g, '। ');
+  utterance.text = textWithPauses;
+  
+  window.speechSynthesis.speak(utterance);
 };
 
 export function AlertProvider({ children }: { children: ReactNode }) {
-  const [alert, setAlert] = useState<{ msg: string; variant: AlertVariant } | null>(null);
+  const [alert, setAlert] = useState<{
+    msg: string;
+    variant: AlertVariant;
+    duration: number;
+    sound: boolean;
+    speech: boolean;
+  } | null>(null);
   
-  const showAlert = (msg: string, variant: AlertVariant = "destructive") => {
-    setAlert({ msg, variant });
+  const showAlert = (config: string | AlertConfig, variant: AlertVariant = "destructive") => {
+    const alertConfig = typeof config === 'string' 
+      ? { msg: config, variant, duration: 4000, sound: true, speech: true }
+      : { duration: 4000, sound: true, speech: true, ...config };
     
-    // Process message for better voice-over
-    const processedMessage = processMessageForSpeech(msg, variant);
+    const processedMsg = processMessage(alertConfig.msg, alertConfig.variant);
     
-    // Play appropriate sound based on message content and variant
-    if (variant === 'success') {
-      if (msg.toLowerCase().includes('update') || msg.toLowerCase().includes('updated')) {
-        playSound('update');
-      } else {
-        playSound('success');
-      }
-    } else {
-      playSound('error');
+    setAlert({
+      msg: processedMsg,
+      variant: alertConfig.variant,
+      duration: alertConfig.duration,
+      sound: alertConfig.sound,
+      speech: alertConfig.speech
+    });
+    
+    if (alertConfig.sound) {
+      playSound(alertConfig.variant);
     }
     
-    // Speak the message with voice-over
-    speakMessage(processedMessage, variant);
+    if (alertConfig.speech) {
+      // Small delay to let sound finish
+      setTimeout(() => speakInNepali(processedMsg, alertConfig.variant), 100);
+    }
   };
+  
+  const hideAlert = () => setAlert(null);
 
-  // Auto-dismiss all alerts after 5 seconds
   useEffect(() => {
-    if (alert) {
-      const timer = setTimeout(() => {
-        setAlert(null);
-      }, 5000);
-
+    if (alert && alert.duration > 0) {
+      const timer = setTimeout(() => setAlert(null), alert.duration);
       return () => clearTimeout(timer);
     }
   }, [alert]);
 
   return (
-    <AlertContext.Provider value={{ showAlert }}>
+    <AlertContext.Provider value={{ showAlert, hideAlert }}>
       {children}
       {alert && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-md">
-          <Alert variant={alert.variant} className="relative">
-            <div className="flex items-start justify-between">
-              <span className="flex-1">{alert.msg}</span>
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-sm mx-4">
+          <Alert variant={alert.variant} className="shadow-lg animate-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium text-left leading-relaxed">
+                {alert.msg}
+              </span>
               <button
-                onClick={() => setAlert(null)}
-                className="ml-2 p-1 hover:bg-gray-100 rounded transition-colors"
+                onClick={hideAlert}
+                className="p-1 hover:bg-black/10 rounded transition-colors"
+                aria-label="बन्द गर्नुहोस्"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -210,4 +266,4 @@ export function AlertProvider({ children }: { children: ReactNode }) {
       )}
     </AlertContext.Provider>
   );
-} 
+}
