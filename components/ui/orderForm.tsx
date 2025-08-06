@@ -221,7 +221,7 @@ export function OrderForm({
       customerId: '',
       factoryId: '',
       measurementId: '',
-      catalogId: '',
+      catalogId: '"689377c149af0fb9b8bcb47c"',
       brandName: ''
     }
   })
@@ -760,9 +760,7 @@ export function OrderForm({
                               catalogItem: { 
                                 ...newArray[index].catalogItem, 
                                 brandName: selectedBrand?.brandName || selectedBrand?.name || val,
-                                codeNumber: newArray[index].catalogItem?.codeNumber,
-                                pricePerMeter: newArray[index].catalogItem?.pricePerMeter,
-                                washable: newArray[index].catalogItem?.washable
+                            
                               } 
                             }
                             handleFieldChange(fieldName, newArray)
@@ -801,71 +799,8 @@ export function OrderForm({
                           </p>
                         )}
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Code Number</label>
-                        <Input
-                          type="text"
-                          value={item.catalogItem?.codeNumber || ''}
-                          onChange={(e) => {
-                            const newArray = [...arrayItems]
-                            newArray[index] = { 
-                              ...newArray[index], 
-                              catalogItem: { 
-                                ...newArray[index].catalogItem, 
-                                codeNumber: e.target.value 
-                              } 
-                            }
-                            handleFieldChange(fieldName, newArray)
-                          }}
-                          placeholder="Enter code number"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Price Per Meter</label>
-                        <Input
-                          type="number"
-                          value={item.catalogItem?.pricePerMeter || ''}
-                          onChange={(e) => {
-                            const newArray = [...arrayItems]
-                            newArray[index] = { 
-                              ...newArray[index], 
-                              catalogItem: { 
-                                ...newArray[index].catalogItem, 
-                                pricePerMeter: parseFloat(e.target.value) || 0 
-                              } 
-                            }
-                            handleFieldChange(fieldName, newArray)
-                          }}
-                          min={0}
-                          step={0.01}
-                          placeholder="0.00"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Washable</label>
-                        <Select
-                          value={item.catalogItem?.washable?.toString() || 'true'}
-                          onValueChange={(val) => {
-                            const newArray = [...arrayItems]
-                            newArray[index] = { 
-                              ...newArray[index], 
-                              catalogItem: { 
-                                ...newArray[index].catalogItem, 
-                                washable: val === 'true' 
-                              } 
-                            }
-                            handleFieldChange(fieldName, newArray)
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select washable option" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="true">Yes</SelectItem>
-                            <SelectItem value="false">No</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    
+                    
                     </div>
                   </div>
                 ))}
@@ -1034,19 +969,7 @@ export function OrderForm({
     }
   }, [getFieldGroups])
 
-  // Show UI error if any
-  if (uiError) {
-    return (
-      <div className="fixed top-4 right-4 z-50">
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
-            <span className="ml-3 text-lg">Loading order form...</span>
-          </div>
-        </div>
-      </div>
-    )
-  }
+
 
   if (orderLoading || lookupLoading || !formData || typeof formData !== 'object') {
     return <FormSkeleton />
@@ -1059,7 +982,6 @@ export function OrderForm({
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex items-center justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
-            <span className="ml-3 text-lg">Loading order form...</span>
           </div>
         </div>
       </div>

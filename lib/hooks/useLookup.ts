@@ -454,7 +454,7 @@ export function useLookup({
         lowerKey.includes('percentage') ||
         lowerKey.includes('rate') ||
         lowerKey.includes('score') ||
-        lowerKey.includes('rating')) {
+        lowerKey.includes('Chest')) {
       return { type: 'number' };
     }
 
