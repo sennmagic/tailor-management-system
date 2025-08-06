@@ -197,11 +197,13 @@ export function useAPIMutation<TResponse = any, TData = unknown>(
 ) {
   const queryClient = useQueryClient();
   
-  const mutation = useMutation<TResponse, Error, TData>({
-    mutationFn: async (data: TData) => {
+  const mutation = useMutation<TResponse, Error, TData & { _id?: string }>({
+    mutationFn: async (data: TData & { _id?: string }) => {
+      const { _id, ...mutationData } = data;
       const result = await fetchAPI<TResponse, TData>({
         ...options,
-        data,
+        data: mutationData as TData,
+        id: _id || options.id,
       });
       if (result.error) {
         throw new Error(result.error);

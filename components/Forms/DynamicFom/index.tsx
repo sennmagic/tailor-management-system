@@ -38,12 +38,7 @@ export function DynamicForm({
       renderCellValue
     } = useLookup({ data });
 
-    // Initialize form analysis
-    useEffect(() => {
-      console.log('🔍 Analyzing form structure:', data);
-      analyzeFormStructure(data);
-    }, [data, analyzeFormStructure]);
-
+    
     // Update form state when data changes, but preserve user input
     useEffect(() => {
       if (data) {
@@ -455,16 +450,7 @@ export function DynamicForm({
         templateKeys = Object.keys(itemTemplate);
       }
 
-      // Debug logging
-      console.log('🔍 Array Field Debug:', {
-        key,
-        fieldPath,
-        config,
-        itemTemplate,
-        templateKeys,
-        currentArray,
-        isComplexArray: config.isComplexArray
-      });
+
 
       // Check if this is a simple key-value structure (like label-value pairs or label-date pairs)
       let isSimpleKeyValue = templateKeys.length === 2 && 

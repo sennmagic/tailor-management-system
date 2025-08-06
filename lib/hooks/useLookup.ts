@@ -644,8 +644,23 @@ export function useLookup({
 
 
 
-    // Factory lookup detection
-    if (lowerKey.includes('factory')) {
+    // Factory lookup detection - only for exact "factory" field, not "factoryName" or other variations
+    if (lowerKey === 'factory') {
+      // If field name is exactly "factory", map to "factories" endpoint
+      return {
+        type: 'lookup',
+        config: {
+          endpoint: 'factories', // Map factory fields to factories endpoint
+          displayField: 'factoryName',
+          entityName: 'factory',
+          fieldPath: fullPath,
+          isFactoryLookup: true // Flag to indicate this is a factory lookup
+        }
+      };
+    }
+    
+    // Factory ID and other factory-related fields (but not exact "factory" or "factoryName")
+    if (lowerKey === 'factoryid' || lowerKey === 'factory_id') {
       return {
         type: 'lookup',
         config: {

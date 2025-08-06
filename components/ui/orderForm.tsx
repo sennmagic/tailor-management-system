@@ -6,10 +6,11 @@ import { Input } from './input'
 import { Button } from './button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select'
 import { Textarea } from './textarea'
+import { Skeleton } from './skeleton'
 import { useLookup } from '@/lib/hooks/useLookup'
 import { useFormValidation } from '@/lib/hooks/useFormValidation'
 import { useAPIMutation, useAPI } from '@/lib/apiService'
-import { Alert } from './alert'
+import { useAlert } from './alertProvider'
 import { Plus, Trash2, Calendar, User, Package, DollarSign, AlertCircle, ChevronDown, FileText, Settings, ShoppingCart } from 'lucide-react'
 import ErrorBoundary from '@/components/error/ErrorBoundary'
 
@@ -30,8 +31,77 @@ export function OrderForm({
   const [formData, setFormData] = useState<Record<string, any>>({})
   const [activeTab, setActiveTab] = useState('basic')
   const [uiError, setUiError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const { showAlert } = useAlert()
+
+  // Skeleton loader component for the form
+  const FormSkeleton = () => (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-12 w-12 rounded-lg" />
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-32" />
+              <Skeleton className="h-4 w-48" />
+            </div>
+          </div>
+          <Skeleton className="h-8 w-8 rounded-lg" />
+        </div>
+
+        {/* Tab Navigation Skeleton */}
+        <div className="border-b border-gray-200 bg-gray-50">
+          <div className="flex space-x-1 p-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-9 w-20 rounded-lg" />
+            ))}
+          </div>
+        </div>
+
+        {/* Form Content Skeleton */}
+        <div className="flex-1 overflow-y-auto p-6 max-h-[60vh]">
+          <div className="space-y-4">
+            {/* Basic Fields */}
+            <div className="space-y-3">
+              <Skeleton className="h-5 w-24" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Lookup Fields */}
+            <div className="space-y-3">
+              <Skeleton className="h-5 w-20" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Skeleton */}
+        <div className="flex items-center justify-between p-6 border-t border-gray-200">
+          <Skeleton className="h-4 w-28" />
+          <div className="flex gap-3">
+            <Skeleton className="h-9 w-16" />
+            <Skeleton className="h-9 w-24" />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 
   // Fetch order data from backend to get form structure - for both create and edit modes
   const { data: orderData, error: orderError, isLoading: orderLoading } = useAPI({
@@ -47,13 +117,44 @@ export function OrderForm({
     method: 'POST',
     onSuccess: (data) => {
       setIsSubmitting(false)
-      setSuccessMessage('Order created successfully!')
-      setTimeout(() => setSuccessMessage(null), 3000)
-      onSuccess?.(data)
+      showAlert('Order created successfully!', 'success')
+      // Only close form on successful submission
+      setTimeout(() => onSuccess?.(data), 2000)
     },
     onError: (error) => {
       setIsSubmitting(false)
-      setUiError(`Failed to create order: ${typeof error === 'string' ? error : 'Unknown error occurred'}`)
+      
+      // Handle validation errors - keep form open and show field errors
+      if (error.includes('Validation failed') || error.includes('required')) {
+        const fieldErrors: Record<string, string> = {}
+        
+        // Parse validation errors and map to specific fields
+        if (error.includes('customerId')) {
+          fieldErrors.customerId = 'Customer is required'
+        }
+        if (error.includes('factoryId')) {
+          fieldErrors.factoryId = 'Factory is required'
+        }
+        if (error.includes('measurementId')) {
+          fieldErrors.measurementId = 'Measurement is required'
+        }
+        if (error.includes('catalogItem')) {
+          fieldErrors['orderItems'] = 'Catalog items are required'
+        }
+        
+        // Set field errors to show red lines - form stays open
+        setErrors(fieldErrors)
+        showAlert('Please fix the validation errors above', 'destructive')
+        
+        // Automatically switch to the tab with errors
+        const tabWithErrors = getTabWithErrors()
+        if (tabWithErrors && tabWithErrors !== activeTab) {
+          setActiveTab(tabWithErrors)
+        }
+      } else {
+        showAlert(`Failed to create order: ${error}`, 'destructive')
+        // Don't close form on other errors either
+      }
     }
   })
 
@@ -62,13 +163,44 @@ export function OrderForm({
     method: 'PATCH',
     onSuccess: (data) => {
       setIsSubmitting(false)
-      setSuccessMessage('Order updated successfully!')
-      setTimeout(() => setSuccessMessage(null), 3000)
-      onSuccess?.(data)
+      showAlert('Order updated successfully!', 'success')
+      // Only close form on successful submission
+      setTimeout(() => onSuccess?.(data), 2000)
     },
     onError: (error) => {
       setIsSubmitting(false)
-      setUiError(`Failed to update order: ${typeof error === 'string' ? error : 'Unknown error occurred'}`)
+      
+      // Handle validation errors - keep form open and show field errors
+      if (error.includes('Validation failed') || error.includes('required')) {
+        const fieldErrors: Record<string, string> = {}
+        
+        // Parse validation errors and map to specific fields
+        if (error.includes('customerId')) {
+          fieldErrors.customerId = 'Customer is required'
+        }
+        if (error.includes('factoryId')) {
+          fieldErrors.factoryId = 'Factory is required'
+        }
+        if (error.includes('measurementId')) {
+          fieldErrors.measurementId = 'Measurement is required'
+        }
+        if (error.includes('catalogItem')) {
+          fieldErrors['orderItems'] = 'Catalog items are required'
+        }
+        
+        // Set field errors to show red lines - form stays open
+        setErrors(fieldErrors)
+        showAlert('Please fix the validation errors above', 'destructive')
+        
+        // Automatically switch to the tab with errors
+        const tabWithErrors = getTabWithErrors()
+        if (tabWithErrors && tabWithErrors !== activeTab) {
+          setActiveTab(tabWithErrors)
+        }
+      } else {
+        showAlert(`Failed to update order: ${error}`, 'destructive')
+        // Don't close form on other errors either
+      }
     }
   })
 
@@ -104,10 +236,17 @@ export function OrderForm({
           : {}
         
         if (mode === 'edit') {
-          const initialFormData = initialData 
-            ? { ...baseOrder, ...initialData }
-            : baseOrder
-          setFormData(initialFormData)
+          // In edit mode, prioritize initialData over baseOrder
+          if (initialData && Object.keys(initialData).length > 0) {
+            // Use initialData as the primary source, merge with baseOrder for structure
+            const editFormData = { ...baseOrder, ...initialData }
+            setFormData(editFormData)
+            console.log('🔄 Edit mode - initialized with initialData:', editFormData)
+          } else {
+            // Fallback to baseOrder if no initialData provided
+            setFormData(baseOrder)
+            console.log('🔄 Edit mode - no initialData, using baseOrder:', baseOrder)
+          }
         } else if (mode === 'create') {
           const createFormData: Record<string, any> = {}
           
@@ -136,11 +275,18 @@ export function OrderForm({
           setFormData(createFormData)
         }
       }
-    } catch (error) {
-      setUiError('Error initializing form data')
-      setFormData({ _id: '', orderItems: [] })
+    } catch (err) {
+      setUiError('Failed to initialize form: ' + (err instanceof Error ? err.message : 'Unknown error'))
     }
-  }, [orderData, initialData, mode])
+  }, [orderData, mode, initialData, detectFieldType])
+
+  // Handle initialData changes in edit mode
+  useEffect(() => {
+    if (mode === 'edit' && initialData && Object.keys(initialData).length > 0) {
+      console.log('🔄 Edit mode - initialData changed:', initialData)
+      setFormData(initialData)
+    }
+  }, [initialData, mode])
 
   // Analyze form structure when orderData changes
   useEffect(() => {
@@ -160,42 +306,41 @@ export function OrderForm({
 
 
   // Simple form state management like dynamic form
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  // const [errors, setErrors] = useState<Record<string, string>>({})
 
   // Simple field change handler like dynamic form
   const handleFieldChange = (fieldName: string, value: any) => {
     setFormData(prev => ({ ...prev, [fieldName]: value }))
-    setErrors(prev => {
-      if (prev[fieldName]) {
-        return { ...prev, [fieldName]: '' }
-      }
-      return prev
-    })
-  }
-
-  // Form validation function
-  const validateForm = (data: Record<string, any>): Record<string, string> => {
-    const validationErrors: Record<string, string> = {}
     
-    // Required fields validation
-    const requiredFields = ['customerId', 'factoryId', 'measurementId']
-    requiredFields.forEach(field => {
-      const value = data[field]
-      if (!value || (typeof value === 'object' && !value._id) || (typeof value === 'string' && value.trim() === '')) {
-        validationErrors[field] = `${formatFieldName(field)} is required`
-      }
-    })
-    
-    // Order items validation
-    if (data.orderItems && Array.isArray(data.orderItems)) {
-      data.orderItems.forEach((item: any, index: number) => {
-        if (!item.catalogItem || (typeof item.catalogItem === 'object' && !item.catalogItem._id)) {
-          validationErrors[`orderItems.${index}.catalogItem`] = 'Catalog item is required'
-        }
+    // Clear error for this field when user starts typing/selecting
+    if (errors[fieldName]) {
+      setErrors(prev => {
+        const newErrors = { ...prev }
+        delete newErrors[fieldName]
+        return newErrors
       })
     }
+
+    // Real-time validation for required fields
+    const validationErrors: Record<string, string> = {}
     
-    return validationErrors
+    // Check if the current field is required and validate it
+    if (fieldName === 'customerId' && (!value || (typeof value === 'object' && !value._id) || (typeof value === 'string' && value.trim() === ''))) {
+      validationErrors.customerId = 'Customer is required'
+    }
+    
+    if (fieldName === 'factoryId' && (!value || (typeof value === 'object' && !value._id) || (typeof value === 'string' && value.trim() === ''))) {
+      validationErrors.factoryId = 'Factory is required'
+    }
+    
+    if (fieldName === 'measurementId' && (!value || (typeof value === 'object' && !value._id) || (typeof value === 'string' && value.trim() === ''))) {
+      validationErrors.measurementId = 'Measurement is required'
+    }
+
+    // Update errors with real-time validation
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(prev => ({ ...prev, ...validationErrors }))
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -203,13 +348,36 @@ export function OrderForm({
     
     setIsSubmitting(true)
     setErrors({})
+    setUiError(null)
 
-    // Validate form before submission
-    const validationErrors = validateForm(formData)
+    // Instant validation before submission
+    const validationErrors: Record<string, string> = {}
+    
+    // Check required fields
+    if (!formData.customerId || (typeof formData.customerId === 'object' && !formData.customerId._id) || (typeof formData.customerId === 'string' && formData.customerId.trim() === '')) {
+      validationErrors.customerId = 'Customer is required'
+    }
+    
+    if (!formData.factoryId || (typeof formData.factoryId === 'object' && !formData.factoryId._id) || (typeof formData.factoryId === 'string' && formData.factoryId.trim() === '')) {
+      validationErrors.factoryId = 'Factory is required'
+    }
+    
+    if (!formData.measurementId || (typeof formData.measurementId === 'object' && !formData.measurementId._id) || (typeof formData.measurementId === 'string' && formData.measurementId.trim() === '')) {
+      validationErrors.measurementId = 'Measurement is required'
+    }
+
+    // If there are validation errors, show them and stop submission
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors)
       setIsSubmitting(false)
-      setUiError('Please fix the validation errors before submitting')
+      showAlert('Please fix the validation errors above', 'destructive')
+      
+      // Automatically switch to the tab with errors
+      const tabWithErrors = getTabWithErrors()
+      if (tabWithErrors && tabWithErrors !== activeTab) {
+        setActiveTab(tabWithErrors)
+      }
+      
       return
     }
 
@@ -219,14 +387,11 @@ export function OrderForm({
     Object.keys(submissionData).forEach(key => {
       const value = submissionData[key]
       if (typeof value === 'object' && value !== null && (value as any)._id) {
-        // Convert lookup objects to just their ID string
         submissionData[key] = (value as any)._id
       } else if (Array.isArray(value)) {
-        // Handle array fields (like orderItems)
         submissionData[key] = value.map((item: any) => {
           if (typeof item === 'object' && item !== null) {
             const processedItem = { ...item }
-            // Convert catalogItem object to ID string
             if (processedItem.catalogItem && typeof processedItem.catalogItem === 'object') {
               processedItem.catalogItem = (processedItem.catalogItem as any)._id || (processedItem.catalogItem as any).id
             }
@@ -237,8 +402,6 @@ export function OrderForm({
       }
     })
     
-    console.log('🔄 Processed submission data:', submissionData)
-    
     // For edit mode, include the ID in the submission data
     if (mode === 'edit' && formData._id) {
       submissionData = { ...submissionData, _id: formData._id }
@@ -248,7 +411,8 @@ export function OrderForm({
       const testData = {
         customerId: 'test-customer-id',
         orderDate: new Date().toISOString().split('T')[0],
-        status: 'DRAFT'
+        status: 'DRAFT',
+        _id: mode === 'edit' ? formData._id : undefined
       }
       
       if (mode === 'create') {
@@ -263,7 +427,6 @@ export function OrderForm({
       if (mode === 'create') {
         await createOrderMutation.mutateAsync(submissionData)
       } else {
-        // For edit mode, include the ID in the URL
         const orderId = formData._id
         if (!orderId) {
           setUiError('Order ID is required for updates')
@@ -271,76 +434,10 @@ export function OrderForm({
           return
         }
         
-        // Check if we have authentication token
-        const token = document.cookie.split('; ').find(row => row.startsWith('refresh_token='))?.split('=')[1]
-        if (!token) {
-          setUiError('Authentication token not found. Please login again.')
-          setIsSubmitting(false)
-          return
-        }
-        
-        // Use fetchAPI directly to include ID in URL
-        const { fetchAPI } = await import('@/lib/apiService')
-        
-        console.log('🔄 Submitting order update:', {
-          orderId,
-          submissionData,
-          mode
+        await updateOrderMutation.mutateAsync({
+          ...submissionData,
+          _id: orderId
         })
-        
-        // Try PATCH first, then PUT if PATCH fails
-        let result = await fetchAPI({
-          endpoint: 'orders',
-          method: 'PATCH',
-          id: orderId,
-          data: submissionData,
-          withAuth: true
-        })
-        
-        // If PATCH fails, try PUT
-        if (result.error && result.error.includes('Method Not Allowed')) {
-          console.log('🔄 PATCH failed, trying PUT...')
-          result = await fetchAPI({
-            endpoint: 'orders',
-            method: 'PATCH',
-            id: orderId,
-            data: submissionData,
-            withAuth: true
-          })
-        }
-        
-        console.log('🔄 Update result:', result)
-        
-        if (result.error) {
-          // Handle validation errors from API
-          if (result.error.includes('must be a string') || result.error.includes('required')) {
-            const apiErrors = JSON.parse(result.error.replace(/^\[|\]$/g, ''))
-            const fieldErrors: Record<string, string> = {}
-            
-            apiErrors.forEach((error: string) => {
-              if (error.includes('customerId')) {
-                fieldErrors.customerId = 'Customer is required'
-              } else if (error.includes('factoryId')) {
-                fieldErrors.factoryId = 'Factory is required'
-              } else if (error.includes('measurementId')) {
-                fieldErrors.measurementId = 'Measurement is required'
-              } else if (error.includes('catalogItem')) {
-                fieldErrors['orderItems'] = 'Catalog items are required'
-              }
-            })
-            
-            setErrors(fieldErrors)
-            setUiError('Please fix the validation errors')
-          } else {
-            setUiError(`Failed to update order: ${result.error}`)
-          }
-          setIsSubmitting(false)
-        } else {
-          setSuccessMessage('Order updated successfully!')
-          setTimeout(() => setSuccessMessage(null), 3000)
-          onSuccess?.(result.data)
-          setIsSubmitting(false)
-        }
       }
     } catch (error: any) {
       setUiError(`Form submission failed: ${error?.message || 'Unknown error occurred'}`)
@@ -357,6 +454,16 @@ export function OrderForm({
       
       if (['_id', '__v', 'createdAt', 'updatedAt', 'isDeleted'].includes(fieldName)) {
         return null
+      }
+
+      // Show skeleton for loading fields
+      if (lookupLoading && fieldType.type === 'lookup') {
+        return (
+          <div key={fieldName} className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        )
       }
 
       if (fieldType.type === 'lookup') {
@@ -861,6 +968,32 @@ export function OrderForm({
     return groups
   }, [formData])
 
+  // Function to determine which tab contains validation errors
+  const getTabWithErrors = useCallback(() => {
+    if (!errors || Object.keys(errors).length === 0) return null
+    
+    const fieldGroups = getFieldGroups()
+    
+    // Check which tab contains the fields with errors
+    for (const [tabId, fields] of Object.entries(fieldGroups)) {
+      const hasErrors = fields.some(fieldName => errors[fieldName])
+      if (hasErrors) {
+        return tabId
+      }
+    }
+    
+    return null
+  }, [errors, getFieldGroups])
+
+  // Function to check if a tab has errors
+  const tabHasErrors = useCallback((tabId: string) => {
+    if (!errors || Object.keys(errors).length === 0) return false
+    
+    const fieldGroups = getFieldGroups()
+    const fields = fieldGroups[tabId] || []
+    return fields.some(fieldName => errors[fieldName])
+  }, [errors, getFieldGroups])
+
 // Data-driven tab configuration
   const getTabConfig = useCallback(() => {
     try {
@@ -905,26 +1038,9 @@ export function OrderForm({
   if (uiError) {
     return (
       <div className="fixed top-4 right-4 z-50">
-        <Alert variant="destructive" title="Application Error" description={uiError}>
-          <div className="flex gap-3 justify-center mt-4">
-            <Button variant="outline" onClick={() => setUiError(null)}>
-              Dismiss
-            </Button>
-            <Button onClick={() => window.location.reload()}>
-              Reload Page
-            </Button>
-          </div>
-        </Alert>
-      </div>
-    )
-  }
-
-  if (orderLoading || !formData || typeof formData !== 'object') {
-    return (
-      <div className="fixed top-4 right-4 z-50">
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex items-center justify-center">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
             <span className="ml-3 text-lg">Loading order form...</span>
           </div>
         </div>
@@ -932,49 +1048,48 @@ export function OrderForm({
     )
   }
 
+  if (orderLoading || lookupLoading || !formData || typeof formData !== 'object') {
+    return <FormSkeleton />
+  }
+
   if (orderError) {
+    showAlert(`Failed to load order form: ${orderError}`, 'destructive')
     return (
       <div className="fixed top-4 right-4 z-50">
-        <Alert variant="destructive" title="Failed to load order form" description={orderError}>
-          <div className="text-sm text-gray-500 mt-4">
-            <p>Possible issues:</p>
-            <ul className="list-disc list-inside mt-2">
-              <li>Network connectivity problem</li>
-              <li>API server is down</li>
-              <li>CORS policy issue</li>
-              <li>Authentication token expired</li>
-            </ul>
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+            <span className="ml-3 text-lg">Loading order form...</span>
           </div>
-          <Button onClick={() => window.location.reload()} className="mt-4">
-            Retry
-          </Button>
-        </Alert>
+        </div>
       </div>
     )
   }
 
   if (!formData || typeof formData !== 'object') {
+    showAlert('No order data available - Unable to load order form structure', 'destructive')
     return (
       <div className="fixed top-4 right-4 z-50">
-        <Alert variant="destructive" title="No order data available" description="Unable to load order form structure" />
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+            <span className="ml-3 text-lg">Loading order form...</span>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-      {/* Success Alert */}
-      {successMessage && (
-        <div className="fixed top-4 right-4 z-[60]">
-          <Alert variant="success" description={successMessage} autoDismiss={3000} />
-        </div>
-      )}
+      {/* Success Alert - Moved to top center for better visibility */}
+      {/* Removed successMessage state, so this block is no longer needed */}
       
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-4">
-                          <div className="p-3 bg-green-500 rounded-lg shadow-sm">
+            <div className="p-3 bg-green-500 rounded-lg shadow-sm">
               <Package className="h-6 w-6 text-white" />
             </div>
             <div>
@@ -1002,23 +1117,58 @@ export function OrderForm({
           {/* Tab Navigation */}
           <div className="border-b border-gray-200 bg-gray-50">
             <div className="flex space-x-1 p-4">
-              {(getTabConfig() || []).map((tab: any) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                    activeTab === tab.id
-                      ? 'bg-white text-green-600 shadow-sm border border-gray-200'
-                      : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-                  }`}
-                >
-                  <tab.icon className="h-4 w-4" />
-                  {tab.label}
-                </button>
-              ))}
+              {(getTabConfig() || []).map((tab: any) => {
+                const hasErrors = tabHasErrors(tab.id)
+                const isErrorTab = getTabWithErrors() === tab.id
+                
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors relative ${
+                      activeTab === tab.id
+                        ? 'bg-white text-green-600 shadow-sm border border-gray-200'
+                        : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                    }`}
+                    style={{
+                      animation: isErrorTab && hasErrors ? 'blink 1.5s ease-in-out infinite' : 'none',
+                      backgroundColor: isErrorTab && hasErrors ? 'rgb(254 242 242)' : undefined,
+                      borderColor: isErrorTab && hasErrors ? 'rgb(254 202 202)' : undefined,
+                      color: isErrorTab && hasErrors ? 'rgb(220 38 38)' : undefined,
+                      boxShadow: isErrorTab && hasErrors ? '0 0 0 3px rgb(254 202 202 / 0.3)' : undefined
+                    }}
+                  >
+                    <tab.icon className="h-4 w-4" />
+                    {tab.label}
+                    {hasErrors && (
+                      <div className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full animate-pulse"></div>
+                    )}
+                  </button>
+                )
+              })}
             </div>
           </div>
+
+          {/* Add CSS for blinking animation */}
+          <style dangerouslySetInnerHTML={{
+            __html: `
+              @keyframes blink {
+                0%, 50% {
+                  background-color: rgb(254 242 242) !important;
+                  border-color: rgb(254 202 202) !important;
+                  color: rgb(220 38 38) !important;
+                  box-shadow: 0 0 0 3px rgb(254 202 202 / 0.3) !important;
+                }
+                25%, 75% {
+                  background-color: rgb(239 68 68) !important;
+                  border-color: rgb(239 68 68) !important;
+                  color: white !important;
+                  box-shadow: 0 0 0 3px rgb(239 68 68 / 0.5) !important;
+                }
+              }
+            `
+          }} />
 
           {/* Tab Content */}
           <div className="flex-1 overflow-y-auto p-6 max-h-[60vh]">
@@ -1035,7 +1185,6 @@ export function OrderForm({
           {/* Footer */}
           <div className="flex items-center justify-between p-6 border-t border-gray-200">
             <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
               <span>{mode === 'create' ? 'Creating new order' : 'Updating order'}</span>
             </div>
             <div className="flex gap-3">
