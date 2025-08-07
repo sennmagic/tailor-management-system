@@ -228,13 +228,25 @@ export function useLookup({
                     const id = item._id || item.id;
                     if (!id) return null;
                     let label = '';
-                    const displayFields = ['name', 'title', 'label', 'displayName'];
-                    for (const field of displayFields) {
-                      if (item[field] && typeof item[field] === 'string') {
-                        label = item[field];
-                        break;
+                    
+                    // Special handling for catalogs - use catalogName and codeNumber
+                    if (config.endpoint === 'catalogs' || config.endpoint === 'catalog') {
+                      const catalogName = item.catalogName || item.name;
+                      const codeNumber = item.codeNumber || item.code || '';
+                      if (catalogName) {
+                        label = codeNumber ? `${catalogName} - ${codeNumber}` : catalogName;
+                      }
+                    } else {
+                      // Generic handling for other entities
+                      const displayFields = ['name', 'title', 'label', 'displayName'];
+                      for (const field of displayFields) {
+                        if (item[field] && typeof item[field] === 'string') {
+                          label = item[field];
+                          break;
+                        }
                       }
                     }
+                    
                     if (!label) {
                       label = `${config.entityName} ${id}`;
                     }
@@ -265,13 +277,25 @@ export function useLookup({
             const id = item._id || item.id;
             if (!id) return null;
             let label = '';
-            const displayFields = ['name', 'title', 'label', 'displayName'];
-            for (const field of displayFields) {
-              if (item[field] && typeof item[field] === 'string') {
-                label = item[field];
-                break;
+            
+            // Special handling for catalogs - use catalogName and codeNumber
+            if (config.endpoint === 'catalogs' || config.endpoint === 'catalog') {
+              const catalogName = item.catalogName || item.name;
+              const codeNumber = item.codeNumber || item.code || '';
+              if (catalogName) {
+                label = codeNumber ? `${catalogName} - ${codeNumber}` : catalogName;
+              }
+            } else {
+              // Generic handling for other entities
+              const displayFields = ['name', 'title', 'label', 'displayName'];
+              for (const field of displayFields) {
+                if (item[field] && typeof item[field] === 'string') {
+                  label = item[field];
+                  break;
+                }
               }
             }
+            
             if (!label) {
               label = `${config.entityName} ${id}`;
             }

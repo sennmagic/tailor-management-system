@@ -217,13 +217,12 @@ export function OrderForm({
     analyzeFormStructure,
     filterSubmitFields
   } = useLookup({ 
-    data: orderData?.orderInfo?.[0] || {
+    data: mode === 'edit' && initialData ? initialData : (orderData?.orderInfo?.[0] || {
       customerId: '',
       factoryId: '',
       measurementId: '',
-      catalogId: '"689377c149af0fb9b8bcb47c"',
-      brandName: ''
-    }
+      orderItems: []
+    })
   })
 
   // Initialize form when order data is loaded (both create and edit modes)
@@ -285,23 +284,39 @@ export function OrderForm({
     if (mode === 'edit' && initialData && Object.keys(initialData).length > 0) {
       console.log('🔄 Edit mode - initialData changed:', initialData)
       setFormData(initialData)
+      
+      // Re-analyze form structure with the new initialData
+      analyzeFormStructure(initialData)
+      
+      // Explicitly fetch catalogs for order items
+      fetchLookupOptions('catalogs', {
+        endpoint: 'catalogs',
+        displayField: 'catalogName',
+        entityName: 'catalog'
+      })
     }
-  }, [initialData, mode])
+  }, [initialData, mode, analyzeFormStructure, fetchLookupOptions])
 
   // Analyze form structure when orderData changes
   useEffect(() => {
-    const structureData = orderData?.orderInfo?.[0] || {
+    const structureData = mode === 'edit' && initialData ? initialData : (orderData?.orderInfo?.[0] || {
       customerId: '',
       factoryId: '',
       measurementId: '',
-      catalogId: '',
-      brandName: ''
-    }
+      orderItems: []
+    })
     
     if (structureData && typeof structureData === 'object' && Object.keys(structureData).length > 0) {
       analyzeFormStructure(structureData)
+      
+      // Explicitly fetch catalogs for order items
+      fetchLookupOptions('catalogs', {
+        endpoint: 'catalogs',
+        displayField: 'catalogName',
+        entityName: 'catalog'
+      })
     }
-  }, [orderData])
+  }, [orderData, initialData, mode, analyzeFormStructure, fetchLookupOptions])
 
 
 
@@ -392,6 +407,11 @@ export function OrderForm({
         submissionData[key] = value.map((item: any) => {
           if (typeof item === 'object' && item !== null) {
             const processedItem = { ...item }
+            // Handle catalogId field specifically for orderItems
+            if (processedItem.catalogId && typeof processedItem.catalogId === 'object') {
+              processedItem.catalogId = (processedItem.catalogId as any)._id || (processedItem.catalogId as any).id
+            }
+            // Handle catalogItem field for backward compatibility
             if (processedItem.catalogItem && typeof processedItem.catalogItem === 'object') {
               processedItem.catalogItem = (processedItem.catalogItem as any)._id || (processedItem.catalogItem as any).id
             }
@@ -660,6 +680,223 @@ export function OrderForm({
         case 'array':
           const arrayItems = value || []
           
+          // Special handling for orderItems array
+          if (fieldName === 'orderItems') {
+            return (
+              <div key={fieldName} className="space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800">{label}</h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const newItem = {
+                        itemType: 'COAT',
+                        itemName: '',
+                        catalogId: null
+                      }
+                      
+                      const newArray = [...arrayItems, newItem]
+                      handleFieldChange(fieldName, newArray)
+                    }}
+                    className="flex items-center gap-2 bg-primary-50 hover:bg-primary-100 text-primary-700 border-primary-200"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Order Item
+                  </Button>
+                </div>
+                <div className="space-y-4">
+                  {arrayItems.map((item: any, index: number) => (
+                    <div key={index} className="bg-white border border-gray-200 rounded-lg p-4 space-y-4 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-gray-700">Order Item {index + 1}</h4>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const newArray = arrayItems.filter((_: any, i: number) => i !== index)
+                            handleFieldChange(fieldName, newArray)
+                          }}
+                          className="text-red-500 hover:text-red-700 border-red-200 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {/* Item Type */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Item Type</label>
+                          <Select
+                            value={item.itemType || ''}
+                            onValueChange={(val) => {
+                              const newArray = [...arrayItems]
+                              newArray[index] = { ...newArray[index], itemType: val }
+                              handleFieldChange(fieldName, newArray)
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select item type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="COAT">Coat</SelectItem>
+                              <SelectItem value="PANT">Pant</SelectItem>
+                              <SelectItem value="WAIST_COAT">Waist Coat</SelectItem>
+                              <SelectItem value="DAURA">Daura</SelectItem>
+                              <SelectItem value="SHIRT">Shirt</SelectItem>
+                              <SelectItem value="SUIT">Suit</SelectItem>
+                              <SelectItem value="DRESS">Dress</SelectItem>
+                              <SelectItem value="OTHER">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        {/* Item Name */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Item Name</label>
+                          <Input
+                            type="text"
+                            value={item.itemName || ''}
+                            onChange={(e) => {
+                              const newArray = [...arrayItems]
+                              newArray[index] = { ...newArray[index], itemName: e.target.value }
+                              handleFieldChange(fieldName, newArray)
+                            }}
+                            placeholder="Enter item name"
+                          />
+                        </div>
+                        
+                                                 {/* Catalog Selection */}
+                         <div>
+                           <label className="block text-sm font-medium mb-2">Catalog Item</label>
+                           <Select
+                             value={(() => {
+                               const catalogValue = item.catalogId?._id || item.catalogId || '';
+                               console.log('🔍 Catalog Select value:', catalogValue, 'item.catalogId:', item.catalogId);
+                               return catalogValue;
+                             })()}
+                             onValueChange={(val) => {
+                               // Find the catalog from any available catalog lookup options
+                               const catalogOptions = Object.entries(lookupOptions || {}).find(([key, options]) => 
+                                 key.includes('catalog') && Array.isArray(options) && options.length > 0
+                               )?.[1] || []
+                               
+                               console.log('🔍 Catalog selection - val:', val, 'catalogOptions:', catalogOptions, 'lookupOptions keys:', Object.keys(lookupOptions || {}))
+                               
+                               const selectedCatalog = catalogOptions.find((c: any) => c.id === val) as any
+                               
+                               const newArray = [...arrayItems]
+                               newArray[index] = { 
+                                 ...newArray[index], 
+                                 catalogId: selectedCatalog ? {
+                                   _id: val,
+                                   catalogName: selectedCatalog.label.split(' - ')[0] || selectedCatalog.label,
+                                   codeNumber: selectedCatalog.label.split(' - ')[1] || '',
+                                   // Note: Other fields like pricePerMeter, quantityAvailable, etc. 
+                                   // would need to be fetched separately or included in the lookup options
+                                 } : val
+                               }
+                               handleFieldChange(fieldName, newArray)
+                             }}
+                             disabled={lookupLoading}
+                           >
+                             <SelectTrigger className="h-10">
+                               <SelectValue placeholder={lookupLoading ? "Loading catalogs..." : "Select catalog item"} />
+                             </SelectTrigger>
+                             <SelectContent>
+                               {lookupLoading ? (
+                                 <SelectItem value="loading" disabled>
+                                   Loading catalogs...
+                                 </SelectItem>
+                               ) : (() => {
+                                 // Find any catalog-related errors
+                                 const catalogError = Object.entries(lookupErrors || {}).find(([key, error]) => 
+                                   key.includes('catalog')
+                                 )?.[1]
+                                 
+                                 if (catalogError) {
+                                   return <SelectItem value="error" disabled>Error loading catalogs</SelectItem>
+                                 }
+                                 
+                                 // Find catalog options from any available lookup
+                                 const catalogOptions = Object.entries(lookupOptions || {}).find(([key, options]) => 
+                                   key.includes('catalog') && Array.isArray(options) && options.length > 0
+                                 )?.[1] || []
+                                 
+                                 console.log('🔍 Catalog options in SelectContent:', catalogOptions, 'all lookupOptions keys:', Object.keys(lookupOptions || {}))
+                                 
+                                 if (catalogOptions.length > 0) {
+                                   return catalogOptions.map((catalog: any) => (
+                                     <SelectItem key={catalog.id} value={catalog.id}>
+                                       {catalog.label}
+                                     </SelectItem>
+                                   ))
+                                 } else {
+                                   return <SelectItem value="empty" disabled>No catalogs available</SelectItem>
+                                 }
+                               })()}
+                             </SelectContent>
+                           </Select>
+                           {(() => {
+                             // Find any catalog-related errors
+                             const catalogError = Object.entries(lookupErrors || {}).find(([key, error]) => 
+                               key.includes('catalog')
+                             )?.[1]
+                             
+                             if (catalogError) {
+                               return (
+                                 <p className="text-red-500 text-sm flex items-center gap-1 mt-1">
+                                   <AlertCircle className="h-4 w-4" />
+                                   Failed to load catalogs: {catalogError}
+                                 </p>
+                               )
+                             }
+                             return null
+                           })()}
+                         </div>
+                      </div>
+                      
+                      {/* Catalog Details Display */}
+                      {item.catalogId && typeof item.catalogId === 'object' && (
+                        <div className="bg-gray-50 p-3 rounded-lg">
+                          <h5 className="font-medium text-sm text-gray-700 mb-2">Catalog Details</h5>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                            <div>
+                              <span className="text-gray-500">Name:</span>
+                              <span className="ml-1 font-medium">{item.catalogId.catalogName || 'N/A'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Code:</span>
+                              <span className="ml-1 font-medium">{item.catalogId.codeNumber || 'N/A'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Price/Meter:</span>
+                              <span className="ml-1 font-medium">
+                                {item.catalogId.pricePerMeter ? `₹${item.catalogId.pricePerMeter}` : 'N/A'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Available:</span>
+                              <span className="ml-1 font-medium">
+                                {item.catalogId.quantityAvailable?.value 
+                                  ? `${item.catalogId.quantityAvailable.value} ${item.catalogId.quantityAvailable.unit || ''}`
+                                  : 'N/A'
+                                }
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          }
+          
+          // Generic array handling for other arrays
           return (
             <div key={fieldName} className="space-y-4">
               <div className="flex items-center justify-between mb-4">
@@ -739,68 +976,93 @@ export function OrderForm({
                           placeholder="Enter item name"
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Brand Name</label>
-                        <Select
-                          value={item.catalogItem?.brandName || ''}
-                          onValueChange={(val) => {
-                            const selectedBrand = (lookupOptions && lookupOptions.brands)?.find((b: any) => b.id === val) as any
-                            
-                            // Fetch catalogs for the selected brand
-                            if (selectedBrand && fetchLookupOptions) {
-                              fetchLookupOptions('catalogs', {
-                                endpoint: 'catalogs',
-                                brandFilter: selectedBrand.brandName || selectedBrand.name
-                              })
-                            }
-                            
-                            const newArray = [...arrayItems]
-                            newArray[index] = { 
-                              ...newArray[index], 
-                              catalogItem: { 
-                                ...newArray[index].catalogItem, 
-                                brandName: selectedBrand?.brandName || selectedBrand?.name || val,
-                            
-                              } 
-                            }
-                            handleFieldChange(fieldName, newArray)
-                          }}
-                          disabled={lookupLoading}
-                        >
-                          <SelectTrigger className="h-10">
-                            <SelectValue placeholder={lookupLoading ? "Loading brands..." : "Select brand"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {lookupLoading ? (
-                              <SelectItem value="loading" disabled>
-                                Loading brands...
-                              </SelectItem>
-                            ) : (lookupErrors && lookupErrors.brands) ? (
-                              <SelectItem value="error" disabled>
-                                Error loading brands
-                              </SelectItem>
-                            ) : (lookupOptions && lookupOptions.brands && Array.isArray(lookupOptions.brands) && lookupOptions.brands.length > 0) ? (
-                              lookupOptions.brands.map((brand: any) => (
-                                <SelectItem key={brand.id} value={brand.id}>
-                                  {brand.brandName || brand.name}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="empty" disabled>
-                                No brands available
-                              </SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                        {lookupErrors && lookupErrors.brands && (
-                          <p className="text-red-500 text-sm flex items-center gap-1 mt-1">
-                            <AlertCircle className="h-4 w-4" />
-                            Failed to load brands: {lookupErrors.brands}
-                          </p>
-                        )}
-                      </div>
-                    
-                    
+                                             <div>
+                         <label className="block text-sm font-medium mb-2">Catalog Item</label>
+                         <Select
+                           value={(() => {
+                             const catalogValue = item.catalogId?._id || item.catalogId || '';
+                             console.log('🔍 Catalog Select value (section 2):', catalogValue, 'item.catalogId:', item.catalogId);
+                             return catalogValue;
+                           })()}
+                           onValueChange={(val) => {
+                             // Find the catalog from any available catalog lookup options
+                             const catalogOptions = Object.entries(lookupOptions || {}).find(([key, options]) => 
+                               key.includes('catalog') && Array.isArray(options) && options.length > 0
+                             )?.[1] || []
+                             
+                             console.log('🔍 Catalog selection (section 2) - val:', val, 'catalogOptions:', catalogOptions, 'lookupOptions keys:', Object.keys(lookupOptions || {}))
+                             
+                             const selectedCatalog = catalogOptions.find((c: any) => c.id === val) as any
+                             
+                             const newArray = [...arrayItems]
+                             newArray[index] = { 
+                               ...newArray[index], 
+                               catalogId: selectedCatalog ? {
+                                 _id: val,
+                                 catalogName: selectedCatalog.label.split(' - ')[0] || selectedCatalog.label,
+                                 codeNumber: selectedCatalog.label.split(' - ')[1] || '',
+                                 // Note: Other fields like pricePerMeter, quantityAvailable, etc. 
+                                 // would need to be fetched separately or included in the lookup options
+                               } : val
+                             }
+                             handleFieldChange(fieldName, newArray)
+                           }}
+                           disabled={lookupLoading}
+                         >
+                           <SelectTrigger className="h-10">
+                             <SelectValue placeholder={lookupLoading ? "Loading catalogs..." : "Select catalog item"} />
+                           </SelectTrigger>
+                           <SelectContent>
+                             {lookupLoading ? (
+                               <SelectItem value="loading" disabled>
+                                 Loading catalogs...
+                               </SelectItem>
+                             ) : (() => {
+                               // Find any catalog-related errors
+                               const catalogError = Object.entries(lookupErrors || {}).find(([key, error]) => 
+                                 key.includes('catalog')
+                               )?.[1]
+                               
+                               if (catalogError) {
+                                 return <SelectItem value="error" disabled>Error loading catalogs</SelectItem>
+                               }
+                               
+                               // Find catalog options from any available lookup
+                               const catalogOptions = Object.entries(lookupOptions || {}).find(([key, options]) => 
+                                 key.includes('catalog') && Array.isArray(options) && options.length > 0
+                               )?.[1] || []
+                               
+                               console.log('🔍 Catalog options in SelectContent (section 2):', catalogOptions, 'all lookupOptions keys:', Object.keys(lookupOptions || {}))
+                               
+                               if (catalogOptions.length > 0) {
+                                 return catalogOptions.map((catalog: any) => (
+                                   <SelectItem key={catalog.id} value={catalog.id}>
+                                     {catalog.label}
+                                   </SelectItem>
+                                 ))
+                               } else {
+                                 return <SelectItem value="empty" disabled>No catalogs available</SelectItem>
+                               }
+                             })()}
+                           </SelectContent>
+                         </Select>
+                         {(() => {
+                           // Find any catalog-related errors
+                           const catalogError = Object.entries(lookupErrors || {}).find(([key, error]) => 
+                             key.includes('catalog')
+                           )?.[1]
+                           
+                           if (catalogError) {
+                             return (
+                               <p className="text-red-500 text-sm flex items-center gap-1 mt-1">
+                                 <AlertCircle className="h-4 w-4" />
+                                 Failed to load catalogs: {catalogError}
+                               </p>
+                             )
+                           }
+                           return null
+                         })()}
+                       </div>
                     </div>
                   </div>
                 ))}
@@ -873,7 +1135,7 @@ export function OrderForm({
           return
         }
         
-        if (lowerFieldName.includes('item') || (fieldType && fieldType.type === 'array')) {
+        if (lowerFieldName.includes('item') || fieldName === 'orderItems' || (fieldType && fieldType.type === 'array')) {
           groups.items.push(fieldName)
         } else if (
           lowerFieldName.includes('date') || 
