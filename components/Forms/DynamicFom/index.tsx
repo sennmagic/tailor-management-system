@@ -380,9 +380,10 @@ export function DynamicForm({
             }
           </h2>
           <p className="text-gray-600">
-            Form fields are automatically generated based on your JSON data structure
+            Form fields are automatically generated based on your JSON data structures
           </p>
         </div>
+
 
         <div className="flex-1 px-6 space-y-6 overflow-y-auto">
           {/* Basic Fields */}
