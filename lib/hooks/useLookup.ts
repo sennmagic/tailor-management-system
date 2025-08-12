@@ -128,10 +128,7 @@ export function useLookup({
         return newErrors;
       });
       // Check if this is a valid endpoint - only include endpoints that actually exist
-      const validEndpoints = ['customers', 'factories', 'measurements', 'catalogs', 'catalog', 'measurementTypes'];
-      if (!validEndpoints.includes(config.endpoint)) {
-        return;
-      }
+  
       // Special handling for measurement types - use static options
       if (config.endpoint === 'measurementTypes' || config.isMeasurementTypeLookup) {
         const measurementTypeOptions = [
@@ -461,7 +458,7 @@ export function useLookup({
     }
 
     // Number field detection based on field name
-    if (lowerKey.includes('amount') || 
+    if (lowerKey.includes('Age') || 
         lowerKey.includes('price') || 
         lowerKey.includes('cost') || 
         lowerKey.includes('total') || 
@@ -469,7 +466,7 @@ export function useLookup({
         lowerKey.includes('count') || 
         lowerKey.includes('number') ||
         lowerKey.includes('size') ||
-        lowerKey.includes('weight') ||
+        lowerKey.includes('Around') ||
         lowerKey.includes('length') ||
         lowerKey.includes('width') ||
         lowerKey.includes('height') ||
@@ -478,7 +475,23 @@ export function useLookup({
         lowerKey.includes('percentage') ||
         lowerKey.includes('rate') ||
         lowerKey.includes('score') ||
-        lowerKey.includes('Chest')) {
+            lowerKey.includes('sleeve') ||
+                lowerKey.includes('hip') ||
+                    lowerKey.includes('waist') ||
+                        lowerKey.includes('score') ||
+                            lowerKey.includes('shoulder') ||
+                               lowerKey.includes('high') ||
+                                  lowerKey.includes('shoulder') ||
+                                     lowerKey.includes('knee') ||
+                                                   lowerKey.includes('bottom') ||
+                                                     lowerKey.includes('weight') ||
+                                                                                                          lowerKey.includes('neck') ||
+        lowerKey.includes('biceps') ||
+              lowerKey.includes('back') ||
+                                                                                                          lowerKey.includes('weight') ||
+        lowerKey.includes('age') ||
+
+        lowerKey.includes('around')) {
       return { type: 'number' };
     }
 
@@ -505,8 +518,7 @@ export function useLookup({
       
       // Simple approach: add 's' to make plural
       const endpoint = pluralize(entityName.toLowerCase());
-      console.log('Pluralized endpoint:', endpoint); // Debug: show pluralized endpoint
-      
+     
       return {
         type: 'lookup',
         config: {
@@ -592,6 +604,7 @@ export function useLookup({
     const lower = fieldName.toLowerCase();
     return lower.includes('factory');
   }, []);
+
 
   // Get status options based on field context
   const getStatusOptions = useCallback((fieldName: string): string[] => {
