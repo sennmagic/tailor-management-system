@@ -370,16 +370,16 @@ export function DynamicForm({
     return (
       <form
         onSubmit={handleSubmit}
-        className="fixed inset-0 z-50 w-screen h-screen bg-white p-0 m-0 flex flex-col overflow-auto"
+        className="fixed inset-0 z-50 w-screen h-screen bg-white px-6 py-6 m-0 flex flex-col overflow-auto"
       >
-        <div className="mb-6 px-6 pt-6">
+        <div className="mb-6 px-6  py-6 bg-primary">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
             {Object.keys(formState).some(k => formState[k] && typeof formState[k] === 'object' && (formState[k] as any)._id) 
               ? 'Edit Item' 
               : 'Add New Item'
             }
           </h2>
-          <p className="text-gray-600">
+          <p className="text-white">
             Form fields are automatically generated based on your JSON data structures
           </p>
         </div>
