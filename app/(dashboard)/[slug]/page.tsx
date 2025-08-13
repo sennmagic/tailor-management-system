@@ -729,16 +729,7 @@ export default function SlugPage() {
           {slug === 'orders' ? 'Orders Management' : (slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : 'Item')}
         </h1>
         <div className="flex gap-2">
-          <Button
-            onClick={() => {
-              // Test DynamicFormWithHook
-              setTestFormOpen(true);
-            }}
-            variant="outline"
-            size="sm"
-          >
-            Test Form
-          </Button>
+      
           <Button
             onClick={() => setAddOpen(true)}
             disabled={isAdding}

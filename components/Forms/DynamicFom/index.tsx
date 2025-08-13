@@ -327,12 +327,28 @@ export function DynamicForm({
                 {formatFieldName(key)}
                 <span className="text-xs text-secondary ml-2">🔢 Number Field</span>
               </label>
-              <Input
-                type="number"
-                value={currentValue || ''}
-                onChange={(e) => handleFieldChange(fieldPath, parseFloat(e.target.value) || 0)}
-                placeholder={commonInputProps.placeholder}
-              />
+          <Input
+  type="number"
+  max={0}
+  value={currentValue ?? ''}
+  onChange={(e) => {
+    const val = e.target.value;
+
+    // Allow empty string so user can type
+    if (val === '') {
+      handleFieldChange(fieldPath, undefined);
+      return;
+    }
+
+    // Allow typing 0 and decimals
+    // Only convert to number if it is a valid number
+    if (!isNaN(Number(val))) {
+      handleFieldChange(fieldPath, val);
+    }
+  }}
+  placeholder={commonInputProps.placeholder}
+/>
+
             </div>
           );
 
