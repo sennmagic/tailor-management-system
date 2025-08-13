@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchAPI } from "@/lib/apiService";
 import pluralize from 'pluralize';
@@ -978,14 +977,33 @@ export function useLookup({
       }
       return "-";
     },
-    filterSubmitFields: (values: Record<string, unknown>) => {
-      const SKIP_FIELDS = ["updatedAt", "createdAt", "__v", "_id", "Is Deleted"];
-      const filtered: Record<string, unknown> = {};
-      Object.entries(values).forEach(([k, v]) => {
-        if (!SKIP_FIELDS.includes(k)) filtered[k] = v;
-      });
-      return filtered;
-    },
+// ...existing code...
+// ...existing code...
+filterSubmitFields: (values: Record<string, unknown>) => {
+  function filter(obj: any, parentKey?: string): any {
+    if (Array.isArray(obj)) {
+      return obj.map(item => filter(item, parentKey));
+    }
+    if (obj && typeof obj === 'object') {
+      // If parentKey ends with 'Id' and obj has _id, return the string _id
+      if (parentKey && parentKey.endsWith('Id') && typeof obj._id === 'string') {
+        return obj._id;
+      }
+      // Otherwise, recursively filter fields
+      const result: any = {};
+      for (const key in obj) {
+        result[key] = filter(obj[key], key);
+      }
+      return result;
+    }
+    return obj;
+  }
+  return filter(values);
+},
+// ...existing code...
+// ...existing code...
+
+// Remove the standalone filterSubmitFields function at the bottom
     getConsistentFormTemplate: (data: Array<Record<string, unknown>>) => {
       function mergeKeys(a: any, b: any): any {
         if (Array.isArray(a) && Array.isArray(b)) return [];
@@ -1071,4 +1089,4 @@ export function useLookup({
       return {};
     }
   };
-} 
+}
