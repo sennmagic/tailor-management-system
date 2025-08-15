@@ -1,17 +1,14 @@
 "use client"
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from './card'
 import { Input } from './input'
 import { Button } from './button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select'
-import { Textarea } from './textarea'
 import { Skeleton } from './skeleton'
 import { useLookup } from '@/lib/hooks/useLookup'
-import { useFormValidation } from '@/lib/hooks/useFormValidation'
 import { useAPIMutation, useAPI } from '@/lib/apiService'
 import { useAlert } from './alertProvider'
-import { Plus, Trash2, Calendar, User, Package, DollarSign, AlertCircle, ChevronDown, FileText, Settings, ShoppingCart } from 'lucide-react'
+import { Plus, Trash2, Calendar, Package, AlertCircle, FileText, ShoppingCart } from 'lucide-react'
 import ErrorBoundary from '@/components/error/ErrorBoundary'
 
 interface OrderFormProps {
@@ -212,7 +209,6 @@ export function OrderForm({
     detectFieldType,
     formatFieldName,
     getStatusOptions,
-    getStatusBadgeStyle,
     fetchLookupOptions,
     analyzeFormStructure,
     filterSubmitFields
@@ -774,7 +770,6 @@ export function OrderForm({
                            <Select
                              value={(() => {
                                const catalogValue = item.catalogId?._id || item.catalogId || '';
-                               console.log('🔍 Catalog Select value:', catalogValue, 'item.catalogId:', item.catalogId);
                                return catalogValue;
                              })()}
                              onValueChange={(val) => {
@@ -817,7 +812,7 @@ export function OrderForm({
                                  )?.[1]
                                  
                                  if (catalogError) {
-                                   return <SelectItem value="error" disabled>Error loading catalogs</SelectItem>
+                                   return <SelectItem value="error" disabled>No  Catalogs </SelectItem>
                                  }
                                  
                                  // Find catalog options from any available lookup

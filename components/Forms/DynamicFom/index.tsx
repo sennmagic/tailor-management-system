@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
-import { fetchAPI } from "@/lib/apiService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useLookup } from "@/lib/hooks/useLookup";
 
 export function DynamicForm({ 
@@ -25,17 +23,14 @@ export function DynamicForm({
       lookupOptions,
       lookupErrors,
       detectFieldType,
-      getStatusOptions,
       formatFieldName,
-      formatValue,
-      formatStatusValue,
+      
       shouldDisplayField,
-      analyzeFormStructure,
+      
       fetchLookupOptions,
       resetLookups,
       filterSubmitFields,
       getEmptyFormData,
-      renderCellValue
     } = useLookup({ data });
 
     
@@ -329,7 +324,7 @@ export function DynamicForm({
               </label>
           <Input
   type="number"
-  max={0}
+
   value={currentValue ?? ''}
   onChange={(e) => {
     const val = e.target.value;
@@ -341,7 +336,7 @@ export function DynamicForm({
     }
 
     // Allow typing 0 and decimals
-    // Only convert to number if it is a valid number
+    // Only convert to number if it is a valid numbera
     if (!isNaN(Number(val))) {
       handleFieldChange(fieldPath, val);
     }

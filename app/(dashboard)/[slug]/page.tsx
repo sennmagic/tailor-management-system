@@ -1,13 +1,12 @@
 "use client";
-import { useEffect, useState, useMemo } from "react";
+import {  useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { fetchAPI, useAPI, useAPIMutation } from "@/lib/apiService";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAlert } from "@/components/ui/alertProvider";
 import { MdVisibility, MdEdit, MdDelete, MdDownload } from "react-icons/md";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbSeparator, BreadcrumbPage } from "@/components/ui/breadcrumb";
 import { DynamicForm } from "@/components/Forms/DynamicFom";
@@ -17,11 +16,7 @@ import { useLookup } from "@/lib/hooks/useLookup";
 
 import Link from "next/link";
 
-// Date picker components
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+
 
 function Modal({ open, onClose, children, isFullScreen = false }: { open: boolean; onClose: () => void; children: React.ReactNode; isFullScreen?: boolean }) {
   if (!open) return null;
@@ -45,7 +40,6 @@ function Modal({ open, onClose, children, isFullScreen = false }: { open: boolea
 }
 
 
-const SKIP_FIELDS = ["updatedAt", "createdAt", "__v", "_id", "isDeleted"];
 
 function ViewDetailsModal({ 
   data, 
@@ -68,22 +62,7 @@ function ViewDetailsModal({
     isDateField 
   } = useLookup();
 
-  // Helper function to format values - REMOVED: using formatValue from useLookup hook instead
-  // function formatValue(value: unknown): string {
-  //   if (value == null || value === undefined) return "Not specified";
-  //   if (typeof value === "boolean") return value ? "Yes" : "No";
-  //   if (typeof value === "string" && value.trim() === "") return "Not specified";
-  //   if (typeof value === "object" && value !== null) {
-  //     if (Array.isArray(value)) {
-  //       return value.length === 0 ? "No items" : `${value.length} item(s)`;
-  //     }
-  //     if (Object.keys(value).length === 0) return "No data";
-  //     return "Object data";
-  //   }
-  //   return String(value);
-  // }
-
-  // Helper function to render nested object data in a user-friendly way
+ 
   function renderNestedData(data: any, title: string): React.ReactNode {
     if (!data || typeof data !== 'object') {
       return <div className="text-gray-500">No data available</div>;
@@ -405,7 +384,6 @@ export default function SlugPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [isDeleting, setIsDeleting] = useState<number | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<number | null>(null);
-  const [isDownloading, setIsDownloading] = useState<number | null>(null);
   const [invoicePreview, setInvoicePreview] = useState<{ url: string; customerId: string; statusData?: any } | null>(null);
 
   // React Query hooks
@@ -413,21 +391,15 @@ export default function SlugPage() {
     endpoint: slug || '',
     method: 'GET',
     enabled: !!slug,
-    // You can also provide initial data here if you have it
-    // initialData: previousData,
+   
   });
 
   // Use the unified lookup hook first
   const {
     extractDataArray,
     isStatusField,
-    isDateField,
     getStatusOptions,
-    getStatusBadgeStyle,
-    formatFieldName,
     formatStatusValue,
-    formatValue,
-    shouldDisplayField,
     renderCellValue,
     filterSubmitFields,
     getEmptyFormData
@@ -452,17 +424,7 @@ export default function SlugPage() {
     },
   });
 
-  const updateMutation = useAPIMutation({
-    endpoint: slug || '',
-    method: 'PUT',
-    onSuccess: () => {
-      showAlert("Update successful!", "success");
-      refetch();
-    },
-    onError: (error) => {
-      showAlert(`Failed to update: ${error}`, "destructive");
-    },
-  });
+
 
   const patchMutation = useAPIMutation({
     endpoint: slug || '',
@@ -501,21 +463,7 @@ export default function SlugPage() {
   });
   
   const [testFormOpen, setTestFormOpen] = useState(false);
-  const [testFormData] = useState({
-    name: "Test Item",
-    status: "pending",
-    customerId: "123",
-    amount: 100,
-    isActive: true,
-    createdAt: "2024-01-01",
-    description: "This is a test item",
-    tags: ["test", "demo"],
-    metadata: {
-      category: "test",
-      priority: "high"
-    }
-  });
-
+ 
 
 
 
@@ -621,7 +569,6 @@ export default function SlugPage() {
       return;
     }
     
-    console.log('🗑️ Deleting item:', { deleteId, slug });
     
     // Use fetchAPI directly to include ID in URL
     const result = await fetchAPI({
@@ -649,7 +596,6 @@ export default function SlugPage() {
       return;
     }
     
-    console.log('🔄 Updating status:', { statusId, fieldName, newValue, slug });
     
     // Use PATCH for orders, PUT for other entities
     const method = slug === 'orders' ? 'PATCH' : 'PUT';
@@ -1013,106 +959,8 @@ export default function SlugPage() {
           />
         </Modal>
       )}
-      <Modal open={invoicePreview !== null} onClose={() => setInvoicePreview(null)}>
-        <div className="w-full max-w-4xl">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Invoice Preview</h2>
-            <button 
-              onClick={() => setInvoicePreview(null)}
-              className="text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          {invoicePreview && (
-            <>
-              {/* Status Section */}
-              {invoicePreview.statusData && Object.keys(invoicePreview.statusData).length > 0 && (
-                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                  <h3 className="text-md font-semibold mb-3 text-gray-800">Order Status</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {Object.entries(invoicePreview.statusData).map(([statusKey, statusValue]) => (
-                      <div key={statusKey} className="flex items-center gap-3">
-                        <label className="text-sm font-medium text-gray-700 min-w-24">
-                          {statusKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:
-                        </label>
-                        <select
-                          value={String(statusValue || '')}
-                                                     onChange={(e) => {
-                            // Update local state for preview
-                            setInvoicePreview(prev => prev ? {
-                              ...prev,
-                              statusData: {
-                                ...prev.statusData,
-                                [statusKey]: e.target.value
-                              }
-                            } : null);
-                          }}
-                          className="flex-1 text-sm px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        >
-                          <option value="">Select Status</option>
-                          <option value="pending">Pending</option>
-                          <option value="in-progress">In Progress</option>
-                          <option value="Paid">Paid</option>
-                          <option value="cancelled">Cancelled</option>
-                          <option value="active">Active</option>
-                          <option value="inactive">Inactive</option>
-                          <option value="approved">Approved</option>
-                          <option value="rejected">Rejected</option>
-                          <option value="processing">Processing</option>
-                          <option value="shipped">Shipped</option>
-                          <option value="delivered">Delivered</option>
-                          <option value="returned">Returned</option>
-                        </select>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              {/* Invoice Preview */}
-              <div className="mb-4">
-                <iframe
-                  src={invoicePreview.url}
-                  className="w-full h-96 border border-gray-300 rounded-lg"
-                  title="Invoice Preview"
-                />
-              </div>
-              
-              {/* Action Buttons */}
-              <div className="flex justify-end gap-2">
-                <Button
-                                     onClick={() => {
-                    // For now, just show a message since we need to implement the download functionality
-                    showAlert("Download functionality needs to be implemented");
-                  }}
-                >
-                  Download Receipt
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setInvoicePreview(null)}
-                >
-                  Close
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-      </Modal>
-      <Modal open={testFormOpen} onClose={() => setTestFormOpen(false)} isFullScreen={true}>
-        <DynamicForm
-          data={testFormData}
-          onSubmit={(values) => {
-            console.log("Submitted test form values:", values);
-            setTestFormOpen(false);
-          }}
-          onCancel={() => setTestFormOpen(false)}
-          isLoading={false}
-        />
-      </Modal>
+  
+  
     </div>
   );
 }

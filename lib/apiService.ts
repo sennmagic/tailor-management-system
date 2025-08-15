@@ -12,7 +12,7 @@ tokens?: {
   userData?: any;
 }
 
-const API_BASE = "https://tms.sachityadav.com.np/api/v1";
+const API_BASE = "http://localhost:3000/api/v1";
 
 interface FetchAPIOptions<T = unknown> {
   endpoint: string;
@@ -110,7 +110,6 @@ export const fetchAPI = async <TResponse = any, TData = unknown>({
     });
     
     clearTimeout(timeoutId)
-    console.log('🌐 API Response Status:', response.status, response.statusText)
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -231,11 +230,3 @@ export function useAPIMutation<TResponse = any, TData = unknown>(
 }
 
 // Test function to check API connectivity
-export async function testAPIConnectivity(): Promise<{ success: boolean; error?: string }> {
-  try {
-    const result = await fetchAPI({ endpoint: 'customers', method: 'GET' });
-    return { success: !result.error, error: result.error || undefined };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-  }
-}
