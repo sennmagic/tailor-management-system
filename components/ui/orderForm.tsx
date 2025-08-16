@@ -1,1663 +1,1411 @@
-"use client";
+"use client"
 
-import { useEffect, useState, useMemo } from "react";
-import { fetchAPI } from "@/lib/apiService";
-import { useAlert } from "@/components/ui/alertProvider";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Loader2, Plus, X, Save, User, Ruler, ShoppingCart, ChevronLeft, CheckCircle, MapPin } from "lucide-react";
-import { cn } from "@/lib/utils";
+import React, { useState, useEffect, useCallback } from 'react'
+import { Input } from './input'
+import { Button } from './button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select'
+import { Skeleton } from './skeleton'
+import { useLookup } from '@/lib/hooks/useLookup'
+import { useAPIMutation, useAPI } from '@/lib/apiService'
+import { useAlert } from './alertProvider'
+import { Plus, Trash2, Calendar, Package, AlertCircle, FileText, ShoppingCart } from 'lucide-react'
+import ErrorBoundary from '@/components/error/ErrorBoundary'
 
 interface OrderFormProps {
-  slug: string;
-  onClose?: () => void;
-  initialData?: any;
-  isEdit?: boolean;
-  editData?: any;
+  initialData?: any
+  onSuccess?: (data: any) => void
+  onCancel?: () => void
+  mode?: 'create' | 'edit'
 }
 
-export function OrderForm({ slug, onClose, initialData, isEdit = false, editData }: OrderFormProps) {
-  const [activeTab, setActiveTab] = useState<'customer' | 'measurement' | 'order'>('customer');
-  
-  // Customer Information
-  const [customerData, setCustomerData] = useState({
-    name: '',
-    contactNum: '',
-    email: '',
-    address: '',
-    dob: '',
-    specialDates: [] as string[]
-  });
-  const [customerId, setCustomerId] = useState('');
-  const [measurementId, setMeasurementId] = useState('');
+export function OrderForm({ 
+  initialData, 
+  onSuccess, 
+  onCancel, 
+  mode = 'create' 
+}: OrderFormProps) {
+  const [isLoading, setIsLoading] = useState(false)
+  const [formData, setFormData] = useState<Record<string, any>>({})
+  const [activeTab, setActiveTab] = useState('basic')
+  const [uiError, setUiError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const { showAlert } = useAlert()
 
-  // Measurement Data
-  const [measurementData, setMeasurementData] = useState({
-    measurementType: 'DAURA SURUWAL' as 'DAURA SURUWAL' | 'SUIT',
-    basicMeasurements: {
-      height: '',
-      weight: '',
-      age: ''
-    },
-    topMeasurements: {
-      length: '',
-      chestAround: '',
-      waist: '',
-      shoulderWidth: '',
-      sleeves: '',
-      neck: '',
-      biceps: '',
-      back: ''
-    },
-    bottomMeasurements: {
-      length: '',
-      waist: '',
-      hip: '',
-      high: '',
-      thigh: '',
-      knee: '',
-      bottom: '',
-      calf: ''
-    },
-    waistCoatMeasurements: {
-      length: '',
-      chestAround: '',
-      waist: '',
-      hip: '',
-      shoulder: '',
-      back: ''
-    },
-    coatMeasurements: {
-      length: '',
-      chestAround: '',
-      waist: '',
-      hip: '',
-      shoulder: '',
-      sleeve: '',
-      biceps: '',
-      back: ''
-    },
-    specialNote: ''
-  });
-
-  // Order Data
-  const [orderData, setOrderData] = useState({
-    customerId: '',
-    orderItems: [
-      {
-        itemType: 'DAURA',
-        itemName: '',
-        catalogItem: ''
-      }
-    ],
-    factoryId: '',
-    measurementId: '',
-    paymentStatus: 'Unpaid' as 'Paid' | 'Unpaid' | 'Partial',
-    orderStatus: 'Pending' as 'Pending' | 'Cutting' | 'Sewing' | 'Ready' | 'Delivered' | 'Cancelled',
-    orderDate: new Date().toISOString().split('T')[0],
-    deliveryDate: '',
-    notes: '',
-    totalGrossAmount: 0
-  });
-
-  const [loading, setLoading] = useState(false);
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [factories, setFactories] = useState<any[]>([]);
-  const [measurements, setMeasurements] = useState<any[]>([]);
-  const [catalogs, setCatalogs] = useState<any[]>([]);
-  const { showAlert } = useAlert();
-
-  // Item type options
-  const itemTypes = [
-    'DAURA',
-    'SURUWAL', 
-    'SHIRT',
-    'PANT',
-    'WAIST_COAT',
-    'COAT',
-    'BLAZER'
-  ];
-
-  // Map item types to measurement types
-  const getMeasurementTypeForItem = (itemType: string) => {
-    switch (itemType) {
-      case 'DAURA':
-      case 'SURUWAL':
-        return 'DAURA SURUWAL';
-      case 'SHIRT':
-      case 'PANT':
-      case 'WAIST_COAT':
-      case 'COAT':
-      case 'BLAZER':
-        return 'SUIT';
-      default:
-        return 'DAURA SURUWAL';
-    }
-  };
-
-  // Filter measurements based on selected item types
-  const filteredMeasurements = useMemo(() => {
-    if (!measurements.length) return [];
-    
-    const requiredMeasurementTypes = [...new Set(
-      orderData.orderItems.map(item => getMeasurementTypeForItem(item.itemType))
-    )];
-    
-    return measurements.filter(measurement => 
-      requiredMeasurementTypes.includes(measurement.measurementType)
-    );
-  }, [measurements, orderData.orderItems]);
-
-  // Load reference data and populate edit data if provided
-  useEffect(() => {
-    const loadData = async () => {
-      const { data: customersData } = await fetchAPI({ endpoint: 'customers', method: 'GET' });
-      if (customersData) {
-        const customersArray = Array.isArray(customersData) ? customersData : (customersData.data || []);
-        setCustomers(customersArray);
-      }
-
-      const { data: factoriesData } = await fetchAPI({ endpoint: 'factories', method: 'GET' });
-      if (factoriesData) {
-        const factoriesArray = Array.isArray(factoriesData) ? factoriesData : (factoriesData.data || []);
-        setFactories(factoriesArray);
-      }
-
-      const { data: measurementsData } = await fetchAPI({ endpoint: 'measurements', method: 'GET' });
-      if (measurementsData) {
-        const measurementsArray = Array.isArray(measurementsData) ? measurementsData : (measurementsData.data || []);
-        setMeasurements(measurementsArray);
-      }
-
-      const { data: catalogsData } = await fetchAPI({ endpoint: 'catalogs', method: 'GET' });
-      if (catalogsData) {
-        const catalogsArray = Array.isArray(catalogsData) ? catalogsData : (catalogsData.data || []);
-        setCatalogs(catalogsArray);
-      }
-
-      // Populate form with edit data if provided
-      if (editData && isEdit) {
-        console.log('Populating form with edit data:', editData);
-        
-        // Set customer data if available
-        if (editData.customerId && typeof editData.customerId === 'object') {
-          setCustomerData({
-            name: editData.customerId.name || '',
-            contactNum: editData.customerId.contactNum || '977000000000',
-            email: editData.customerId.email || '',
-            address: editData.customerId.address || '',
-            dob: editData.customerId.dob || '',
-            specialDates: editData.customerId.specialDates || []
-          });
-          setCustomerId(editData.customerId._id || '');
-        }
-
-        // Set measurement data if available
-        if (editData.measurementId && typeof editData.measurementId === 'object') {
-          setMeasurementData({
-            measurementType: editData.measurementId.measurementType || 'DAURA SURUWAL',
-            basicMeasurements: editData.measurementId.basicMeasurements || {
-              height: '',
-              weight: '',
-              age: ''
-            },
-            topMeasurements: editData.measurementId.topMeasurements || {
-              length: '',
-              chestAround: '',
-              waist: '',
-              shoulderWidth: '',
-              sleeves: '',
-              neck: '',
-              biceps: '',
-              back: ''
-            },
-            bottomMeasurements: editData.measurementId.bottomMeasurements || {
-              length: '',
-              waist: '',
-              hip: '',
-              high: '',
-              thigh: '',
-              knee: '',
-              bottom: '',
-              calf: ''
-            },
-            waistCoatMeasurements: editData.measurementId.waistCoatMeasurements || {
-              length: '',
-              chestAround: '',
-              waist: '',
-              hip: '',
-              shoulder: '',
-              back: ''
-            },
-            coatMeasurements: editData.measurementId.coatMeasurements || {
-              length: '',
-              chestAround: '',
-              waist: '',
-              hip: '',
-              shoulder: '',
-              sleeve: '',
-              biceps: '',
-              back: ''
-            },
-            specialNote: editData.measurementId.specialNote || ''
-          });
-          setMeasurementId(editData.measurementId._id || '');
-        }
-
-        // Set order data
-        setOrderData({
-          customerId: editData.customerId?._id || editData.customerId || '',
-          orderItems: editData.orderItems || [{
-            itemType: 'DAURA',
-            itemName: '',
-            catalogItem: ''
-          }],
-          factoryId: editData.factoryId?._id || editData.factoryId || '',
-          measurementId: editData.measurementId?._id || editData.measurementId || '',
-          paymentStatus: editData.paymentStatus || 'Unpaid',
-          orderStatus: editData.orderStatus || 'Pending',
-          orderDate: editData.orderDate ? new Date(editData.orderDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          deliveryDate: editData.deliveryDate ? new Date(editData.deliveryDate).toISOString().split('T')[0] : '',
-          totalGrossAmount: editData.totalGrossAmount || 0,
-          notes: editData.notes || ''
-        });
-      }
-    };
-
-    loadData();
-  }, [editData, isEdit]);
-
-  // Monitor customerId changes
-  useEffect(() => {
-    console.log('🔄 customerId changed to:', customerId);
-  }, [customerId]);
-
-  // Customer handlers
-  const handleCustomerChange = (field: string, value: string) => {
-    setCustomerData(prev => ({ ...prev, [field]: value }));
-  };
-
-  // Measurement handlers
-  const handleMeasurementChange = (section: string, field: string, value: string) => {
-    setMeasurementData(prev => ({
-      ...prev,
-      [section]: {
-        ...(prev[section as keyof typeof prev] as Record<string, any>),
-        [field]: value
-      }
-    }));
-  };
-
-  // Order handlers
-  const handleOrderChange = (field: string, value: string) => {
-    setOrderData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleItemChange = (index: number, field: string, value: string) => {
-    const newItems = [...orderData.orderItems];
-    const currentItem = newItems[index];
-    newItems[index] = { 
-      itemType: currentItem.itemType,
-      itemName: currentItem.itemName,
-      catalogItem: currentItem.catalogItem,
-      [field]: value 
-    };
-    setOrderData(prev => ({ ...prev, orderItems: newItems }));
-  };
-
-  const addItem = () => {
-    setOrderData(prev => ({
-      ...prev,
-      orderItems: [...prev.orderItems, {
-        itemType: 'DAURA',
-        itemName: '',
-        catalogItem: ''
-      }]
-    }));
-  };
-
-  const removeItem = (index: number) => {
-    if (orderData.orderItems.length > 1) {
-      setOrderData(prev => ({
-        ...prev,
-        orderItems: prev.orderItems.filter((_, i) => i !== index)
-      }));
-    }
-  };
-
-  // Save customer first
-  const handleSaveCustomer = async () => {
-    setLoading(true);
-    
-    // Format contact number properly - ensure it starts with 977 and has proper length
-    let formattedContactNum = customerData.contactNum;
-    
-    console.log('Original contact number:', formattedContactNum);
-    
-    // Remove any non-digit characters
-    formattedContactNum = formattedContactNum.replace(/\D/g, '');
-    
-    console.log('After removing non-digits:', formattedContactNum);
-    
-    // If it's just "977", add some default digits
-    if (formattedContactNum === '977') {
-      formattedContactNum = '977000000000';
-    }
-    
-    // Ensure it starts with 977
-    if (!formattedContactNum.startsWith('977')) {
-      formattedContactNum = `977${formattedContactNum}`;
-    }
-    
-    // Ensure it's exactly 12 digits (977 + 9 digits)
-    if (formattedContactNum.length < 12) {
-      formattedContactNum = formattedContactNum.padEnd(12, '0');
-    } else if (formattedContactNum.length > 12) {
-      formattedContactNum = formattedContactNum.substring(0, 12);
-    }
-    
-    console.log('Final formatted contact number:', formattedContactNum);
-    
-    // Validate the contact number format
-    if (!/^977\d{9}$/.test(formattedContactNum)) {
-      showAlert('Please provide a valid contact number starting with 977 followed by 9 digits', "destructive");
-      setLoading(false);
-      return;
-    }
-    
-    // Convert specialDates to proper format - each date should be an object with label
-    const formattedSpecialDates = customerData.specialDates?.map(date => ({
-      date: date,
-      type: 'custom',
-      label: `Special Date ${new Date(date).toLocaleDateString()}`
-    })) || [];
-    
-    const customerPayload = {
-      ...customerData,
-      contactNum: formattedContactNum,
-      dob: customerData.dob ? new Date(customerData.dob).toISOString() : undefined,
-      specialDates: formattedSpecialDates
-    };
-    
-    console.log('Saving customer data:', customerPayload);
-    
-    const { data, error } = await fetchAPI({
-      endpoint: 'customers',
-      method: 'POST',
-      data: customerPayload,
-      withAuth: true,
-    });
-
-    console.log('Customer API response:', { data, error });
-
-    if (error) {
-      showAlert(`Failed to save customer: ${error}`, "destructive");
-    } else {
-      showAlert('Customer saved successfully!', "success");
-      
-      // Try to get customer ID from response first
-      let newCustomerId = data._id || data.id || data.customerId;
-      
-      // If no ID in response, fetch the latest customer
-      if (!newCustomerId) {
-        console.log('No ID in response, fetching latest customer...');
-        const { data: customersData } = await fetchAPI({ endpoint: 'customers', method: 'GET' });
-        if (customersData) {
-          const customersArray = Array.isArray(customersData) ? customersData : (customersData.data || []);
-          if (customersArray.length > 0) {
-            // Get the latest customer (assuming it's the one we just created)
-            const latestCustomer = customersArray[0]; // or customersArray[customersArray.length - 1]
-            newCustomerId = latestCustomer._id || latestCustomer.id || latestCustomer.customerId;
-            console.log('Found latest customer ID:', newCustomerId);
-          }
-          setCustomers(customersArray);
-        }
-      }
-      
-      console.log('Available ID fields:', { 
-        _id: data._id, 
-        id: data.id, 
-        customerId: data.customerId,
-        fullData: data 
-      });
-      console.log('Setting customerId to:', newCustomerId);
-      setCustomerId(newCustomerId);
-      console.log('Customer saved with ID:', newCustomerId);
-      
-      // Force a small delay to ensure state is updated
-      setTimeout(() => {
-        console.log('After setTimeout - customerId:', customerId);
-      }, 100);
-      
-      setActiveTab('measurement');
-    }
-  };
-
-  // Save measurement
-  const handleSaveMeasurement = async () => {
-    setLoading(true);
-    
-    console.log('=== MEASUREMENT SAVE DEBUG ===');
-    console.log('Current customerId:', customerId);
-    console.log('CustomerId type:', typeof customerId);
-    console.log('CustomerId truthy check:', !!customerId);
-    console.log('CustomerId length:', customerId ? customerId.length : 'N/A');
-    console.log('CustomerId value:', JSON.stringify(customerId));
-    
-    if (!customerId) {
-      console.log('❌ CustomerId is falsy, showing error');
-      showAlert('Please save customer first', 'destructive');
-      setLoading(false);
-      return;
-    }
-
-    // Convert string values to numbers for measurements
-    const convertToNumber = (value: string) => value ? Number(value) : undefined;
-    
-    const measurementPayload = {
-      customerId: customerId,
-      measurementType: measurementData.measurementType,
-      basicMeasurements: {
-        height: convertToNumber(measurementData.basicMeasurements.height),
-        weight: convertToNumber(measurementData.basicMeasurements.weight),
-        age: convertToNumber(measurementData.basicMeasurements.age)
-      },
-      topMeasurements: {
-        length: Number(measurementData.topMeasurements.length),
-        chestAround: Number(measurementData.topMeasurements.chestAround),
-        waist: Number(measurementData.topMeasurements.waist),
-        shoulderWidth: Number(measurementData.topMeasurements.shoulderWidth),
-        sleeves: Number(measurementData.topMeasurements.sleeves),
-        neck: Number(measurementData.topMeasurements.neck),
-        biceps: convertToNumber(measurementData.topMeasurements.biceps),
-        back: convertToNumber(measurementData.topMeasurements.back)
-      },
-      bottomMeasurements: {
-        length: Number(measurementData.bottomMeasurements.length),
-        waist: Number(measurementData.bottomMeasurements.waist),
-        hip: Number(measurementData.bottomMeasurements.hip),
-        high: Number(measurementData.bottomMeasurements.high),
-        thigh: Number(measurementData.bottomMeasurements.thigh),
-        knee: Number(measurementData.bottomMeasurements.knee),
-        bottom: Number(measurementData.bottomMeasurements.bottom),
-        calf: convertToNumber(measurementData.bottomMeasurements.calf)
-      },
-      waistCoatMeasurements: measurementData.measurementType === 'SUIT' ? {
-        length: convertToNumber(measurementData.waistCoatMeasurements.length),
-        chestAround: convertToNumber(measurementData.waistCoatMeasurements.chestAround),
-        waist: convertToNumber(measurementData.waistCoatMeasurements.waist),
-        hip: convertToNumber(measurementData.waistCoatMeasurements.hip),
-        shoulder: convertToNumber(measurementData.waistCoatMeasurements.shoulder),
-        back: convertToNumber(measurementData.waistCoatMeasurements.back)
-      } : undefined,
-      coatMeasurements: {
-        length: Number(measurementData.coatMeasurements.length),
-        chestAround: Number(measurementData.coatMeasurements.chestAround),
-        waist: Number(measurementData.coatMeasurements.waist),
-        hip: Number(measurementData.coatMeasurements.hip),
-        shoulder: Number(measurementData.coatMeasurements.shoulder),
-        sleeve: Number(measurementData.coatMeasurements.sleeve),
-        biceps: Number(measurementData.coatMeasurements.biceps),
-        back: Number(measurementData.coatMeasurements.back)
-      },
-      specialNote: measurementData.specialNote,
-      status: 'DRAFT'
-    };
-
-    const { data, error } = await fetchAPI({
-      endpoint: 'measurements',
-      method: 'POST',
-      data: measurementPayload,
-      withAuth: true,
-    });
-
-    if (error) {
-      showAlert(`Failed to save measurement: ${error}`, "destructive");
-    } else {
-      showAlert('Measurement saved successfully!', "success");
-      const newMeasurementId = data._id || data.id || data.measurementId;
-      setMeasurementId(newMeasurementId);
-      console.log('Measurement saved with ID:', newMeasurementId);
-      
-      // Refresh measurements list
-      const { data: measurementsData } = await fetchAPI({ endpoint: 'measurements', method: 'GET' });
-      if (measurementsData) {
-        const measurementsArray = Array.isArray(measurementsData) ? measurementsData : (measurementsData.data || []);
-        setMeasurements(measurementsArray);
-      }
-      setActiveTab('order');
-    }
-    
-    setLoading(false);
-  };
-
-  // Submit order
-  const handleSubmitOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    if (!measurementId) {
-      showAlert('Please save measurement first', 'destructive');
-      setLoading(false);
-      return;
-    }
-
-    const orderPayload = {
-      customerId: customerId,
-      orderItems: orderData.orderItems,
-      factoryId: orderData.factoryId,
-      measurementId: measurementId,
-      paymentStatus: orderData.paymentStatus,
-      orderStatus: orderData.orderStatus,
-      orderDate: new Date(orderData.orderDate),
-      deliveryDate: orderData.deliveryDate ? new Date(orderData.deliveryDate) : undefined,
-      notes: orderData.notes,
-      totalGrossAmount: orderData.totalGrossAmount
-    };
-
-    const { error } = await fetchAPI({
-      endpoint: slug,
-      method: isEdit ? 'PUT' : 'POST',
-      data: orderPayload,
-      withAuth: true,
-    });
-
-    if (error) {
-      showAlert(`Failed to ${isEdit ? 'update' : 'create'} order: ${error}`, "destructive");
-    } else {
-      showAlert(`Order ${isEdit ? 'updated' : 'created'} successfully!`, "success");
-      if (onClose) onClose();
-    }
-    
-    setLoading(false);
-  };
-
-  const getMeasurementTypeDescription = (measurementType: string) => {
-    switch (measurementType) {
-      case 'DAURA SURUWAL':
-        return 'Daura Suruwal Measurements';
-      case 'SUIT':
-        return 'Suit Measurements';
-      default:
-        return measurementType;
-    }
-  };
-
-  const renderCustomerTab = () => (
-    <div className="space-y-6 sm:space-y-8">
-      {/* Header Section */}
-      <div className="border-b border-gray-200 pb-4 sm:pb-6">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Customer Information</h2>
-        <p className="text-sm sm:text-base text-gray-600">Please provide the customer's basic details to proceed with the order.</p>
-      </div>
-
-      {/* Personal Information Section */}
-      <div className="bg-primary/5 rounded-lg p-4 sm:p-6 border border-primary/20">
-        <h3 className="text-base sm:text-lg font-semibold text-primary mb-3 sm:mb-4 flex items-center">
-          <User className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-          Personal Information
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-gray-700">
-              Customer Name <span className="text-red-500">*</span>
-            </label>
-            <Input
-              value={customerData.name}
-              onChange={(e) => handleCustomerChange('name', e.target.value)}
-              placeholder="Enter full customer name"
-              className="h-10 sm:h-12 text-sm sm:text-base"
-              required
-            />
-            <p className="text-xs text-gray-500">Enter the customer's full name as it appears on official documents</p>
-          </div>
-          
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-gray-700">
-              Contact Number <span className="text-red-500">*</span>
-            </label>
-            <Input
-              value={customerData.contactNum}
-              onChange={(e) => handleCustomerChange('contactNum', e.target.value)}
-              placeholder="977XXXXXXXXX"
-              className="h-10 sm:h-12 text-sm sm:text-base"
-              required
-            />
-            <p className="text-xs text-gray-500">Enter the contact number with country code (977)</p>
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-gray-700">
-              Email Address
-            </label>
-            <Input
-              value={customerData.email}
-              onChange={(e) => handleCustomerChange('email', e.target.value)}
-              placeholder="customer@example.com"
-              type="email"
-              className="h-10 sm:h-12 text-sm sm:text-base"
-            />
-            <p className="text-xs text-gray-500">Optional: For order notifications and updates</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Additional Details Section */}
-      <div className="bg-muted rounded-lg p-4 sm:p-6 border border-border">
-        <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4 flex items-center">
-          <CalendarIcon className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-          Additional Details
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                      <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
-                Date of Birth <span className="text-red-500">*</span>
-              </label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal h-10 sm:h-12 text-sm sm:text-base",
-                      !customerData.dob && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {customerData.dob ? new Date(customerData.dob).toLocaleDateString() : "Select date of birth"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={customerData.dob ? new Date(customerData.dob) : undefined}
-                    onSelect={(date) => handleCustomerChange('dob', date ? date.toISOString().split('T')[0] : '')}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              <p className="text-xs text-gray-500">Required for age-appropriate measurements</p>
-            </div>
-            
+  // Skeleton loader component for the form
+  const FormSkeleton = () => (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-12 w-12 rounded-lg" />
             <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">
-                Special Dates
-              </label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal h-10 sm:h-12 text-sm sm:text-base",
-                      !customerData.specialDates?.length && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {customerData.specialDates?.length 
-                      ? `${customerData.specialDates.length} date(s) selected: ${customerData.specialDates.slice(0, 2).join(', ')}${customerData.specialDates.length > 2 ? '...' : ''}`
-                      : "Select special dates"
-                    }
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="multiple"
-                    selected={customerData.specialDates?.map(date => new Date(date)) || []}
-                    onSelect={(dates) => {
-                      console.log('Selected dates:', dates);
-                      const dateStrings = dates?.map(date => date.toISOString().split('T')[0]) || [];
-                      console.log('Date strings:', dateStrings);
-                      setCustomerData(prev => ({ ...prev, specialDates: dateStrings }));
-                    }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              <p className="text-xs text-gray-500">Optional: Select important dates for the customer</p>
+              <Skeleton className="h-6 w-32" />
+              <Skeleton className="h-4 w-48" />
             </div>
-        </div>
-      </div>
-
-      {/* Address Section */}
-      <div className="bg-primary/5 rounded-lg p-4 sm:p-6 border border-primary/20">
-        <h3 className="text-base sm:text-lg font-semibold text-primary mb-3 sm:mb-4 flex items-center">
-          <MapPin className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-          Address
-        </h3>
-        <div className="space-y-2">
-          <label className="block text-sm font-semibold text-gray-700">
-            Customer Address
-          </label>
-          <Input
-            value={customerData.address}
-            onChange={(e) => handleCustomerChange('address', e.target.value)}
-            placeholder="Enter customer address"
-            className="h-10 sm:h-12 text-sm sm:text-base"
-          />
-          <p className="text-xs text-gray-500">Optional: Customer's address</p>
-        </div>
-      </div>
-
-      {/* Validation Summary */}
-      <div className="bg-accent rounded-lg p-3 sm:p-4 border border-border">
-        <div className="flex items-start">
-          <div className="flex-shrink-0">
-            <svg className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
           </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-foreground">Required Fields</h3>
-            <div className="mt-2 text-sm text-muted-foreground">
-              <p>Please ensure all fields marked with <span className="text-red-500 font-bold">*</span> are completed before proceeding.</p>
+          <Skeleton className="h-8 w-8 rounded-lg" />
+        </div>
+
+        {/* Tab Navigation Skeleton */}
+        <div className="border-b border-gray-200 bg-gray-50">
+          <div className="flex space-x-1 p-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-9 w-20 rounded-lg" />
+            ))}
+          </div>
+        </div>
+
+        {/* Form Content Skeleton */}
+        <div className="flex-1 overflow-y-auto p-6 max-h-[60vh]">
+          <div className="space-y-4">
+            {/* Basic Fields */}
+            <div className="space-y-3">
+              <Skeleton className="h-5 w-24" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ))}
+              </div>
             </div>
+
+            {/* Lookup Fields */}
+            <div className="space-y-3">
+              <Skeleton className="h-5 w-20" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Skeleton */}
+        <div className="flex items-center justify-between p-6 border-t border-gray-200">
+          <Skeleton className="h-4 w-28" />
+          <div className="flex gap-3">
+            <Skeleton className="h-9 w-16" />
+            <Skeleton className="h-9 w-24" />
           </div>
         </div>
       </div>
     </div>
-  );
+  )
 
-  const renderMeasurementTab = () => (
-    <div className="space-y-6">
-      {/* Measurement Type */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Measurement Type *
-        </label>
-        <select
-          value={measurementData.measurementType}
-          onChange={(e) => setMeasurementData(prev => ({ ...prev, measurementType: e.target.value as 'DAURA SURUWAL' | 'SUIT' }))}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        >
-          <option value="DAURA SURUWAL">Daura Suruwal</option>
-          <option value="SUIT">Suit</option>
-        </select>
-      </div>
+  // Fetch order data from backend to get form structure - for both create and edit modes
+  const { data: orderData, error: orderError, isLoading: orderLoading } = useAPI({
+    endpoint: 'orders',
+    method: 'GET',
+    withAuth: true,
+    enabled: true
+  })
 
-      {/* Basic Measurements */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Basic Information</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Height (cm)</label>
-              <Input
-                value={measurementData.basicMeasurements.height}
-                onChange={(e) => handleMeasurementChange('basicMeasurements', 'height', e.target.value)}
-                type="number"
-                placeholder="Height"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Weight (kg)</label>
-              <Input
-                value={measurementData.basicMeasurements.weight}
-                onChange={(e) => handleMeasurementChange('basicMeasurements', 'weight', e.target.value)}
-                type="number"
-                placeholder="Weight"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Age</label>
-              <Input
-                value={measurementData.basicMeasurements.age}
-                onChange={(e) => handleMeasurementChange('basicMeasurements', 'age', e.target.value)}
-                type="number"
-                placeholder="Age"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Top Measurements */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Top Garment Measurements</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Length</label>
-              <Input
-                value={measurementData.topMeasurements.length}
-                onChange={(e) => handleMeasurementChange('topMeasurements', 'length', e.target.value)}
-                type="number"
-                placeholder="Length"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Chest Around</label>
-              <Input
-                value={measurementData.topMeasurements.chestAround}
-                onChange={(e) => handleMeasurementChange('topMeasurements', 'chestAround', e.target.value)}
-                type="number"
-                placeholder="Chest"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Waist</label>
-              <Input
-                value={measurementData.topMeasurements.waist}
-                onChange={(e) => handleMeasurementChange('topMeasurements', 'waist', e.target.value)}
-                type="number"
-                placeholder="Waist"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Shoulder Width</label>
-              <Input
-                value={measurementData.topMeasurements.shoulderWidth}
-                onChange={(e) => handleMeasurementChange('topMeasurements', 'shoulderWidth', e.target.value)}
-                type="number"
-                placeholder="Shoulder"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Sleeves</label>
-              <Input
-                value={measurementData.topMeasurements.sleeves}
-                onChange={(e) => handleMeasurementChange('topMeasurements', 'sleeves', e.target.value)}
-                type="number"
-                placeholder="Sleeves"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Neck</label>
-              <Input
-                value={measurementData.topMeasurements.neck}
-                onChange={(e) => handleMeasurementChange('topMeasurements', 'neck', e.target.value)}
-                type="number"
-                placeholder="Neck"
-                required
-              />
-            </div>
-            {measurementData.measurementType === 'SUIT' && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Biceps</label>
-                  <Input
-                    value={measurementData.topMeasurements.biceps}
-                    onChange={(e) => handleMeasurementChange('topMeasurements', 'biceps', e.target.value)}
-                    type="number"
-                    placeholder="Biceps"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Back</label>
-                  <Input
-                    value={measurementData.topMeasurements.back}
-                    onChange={(e) => handleMeasurementChange('topMeasurements', 'back', e.target.value)}
-                    type="number"
-                    placeholder="Back"
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Bottom Measurements */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Bottom Garment Measurements</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Length</label>
-              <Input
-                value={measurementData.bottomMeasurements.length}
-                onChange={(e) => handleMeasurementChange('bottomMeasurements', 'length', e.target.value)}
-                type="number"
-                placeholder="Length"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Waist</label>
-              <Input
-                value={measurementData.bottomMeasurements.waist}
-                onChange={(e) => handleMeasurementChange('bottomMeasurements', 'waist', e.target.value)}
-                type="number"
-                placeholder="Waist"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Hip</label>
-              <Input
-                value={measurementData.bottomMeasurements.hip}
-                onChange={(e) => handleMeasurementChange('bottomMeasurements', 'hip', e.target.value)}
-                type="number"
-                placeholder="Hip"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">High</label>
-              <Input
-                value={measurementData.bottomMeasurements.high}
-                onChange={(e) => handleMeasurementChange('bottomMeasurements', 'high', e.target.value)}
-                type="number"
-                placeholder="High"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Thigh</label>
-              <Input
-                value={measurementData.bottomMeasurements.thigh}
-                onChange={(e) => handleMeasurementChange('bottomMeasurements', 'thigh', e.target.value)}
-                type="number"
-                placeholder="Thigh"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Knee</label>
-              <Input
-                value={measurementData.bottomMeasurements.knee}
-                onChange={(e) => handleMeasurementChange('bottomMeasurements', 'knee', e.target.value)}
-                type="number"
-                placeholder="Knee"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Bottom</label>
-              <Input
-                value={measurementData.bottomMeasurements.bottom}
-                onChange={(e) => handleMeasurementChange('bottomMeasurements', 'bottom', e.target.value)}
-                type="number"
-                placeholder="Bottom"
-                required
-              />
-            </div>
-            {measurementData.measurementType === 'DAURA SURUWAL' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Calf</label>
-                <Input
-                  value={measurementData.bottomMeasurements.calf}
-                  onChange={(e) => handleMeasurementChange('bottomMeasurements', 'calf', e.target.value)}
-                  type="number"
-                  placeholder="Calf"
-                />
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Waist Coat Measurements (SUIT only) */}
-      {measurementData.measurementType === 'SUIT' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Waist Coat Measurements</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Length</label>
-                <Input
-                  value={measurementData.waistCoatMeasurements.length}
-                  onChange={(e) => handleMeasurementChange('waistCoatMeasurements', 'length', e.target.value)}
-                  type="number"
-                  placeholder="Length"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Chest Around</label>
-                <Input
-                  value={measurementData.waistCoatMeasurements.chestAround}
-                  onChange={(e) => handleMeasurementChange('waistCoatMeasurements', 'chestAround', e.target.value)}
-                  type="number"
-                  placeholder="Chest"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Waist</label>
-                <Input
-                  value={measurementData.waistCoatMeasurements.waist}
-                  onChange={(e) => handleMeasurementChange('waistCoatMeasurements', 'waist', e.target.value)}
-                  type="number"
-                  placeholder="Waist"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Hip</label>
-                <Input
-                  value={measurementData.waistCoatMeasurements.hip}
-                  onChange={(e) => handleMeasurementChange('waistCoatMeasurements', 'hip', e.target.value)}
-                  type="number"
-                  placeholder="Hip"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Shoulder</label>
-                <Input
-                  value={measurementData.waistCoatMeasurements.shoulder}
-                  onChange={(e) => handleMeasurementChange('waistCoatMeasurements', 'shoulder', e.target.value)}
-                  type="number"
-                  placeholder="Shoulder"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Back</label>
-                <Input
-                  value={measurementData.waistCoatMeasurements.back}
-                  onChange={(e) => handleMeasurementChange('waistCoatMeasurements', 'back', e.target.value)}
-                  type="number"
-                  placeholder="Back"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Coat Measurements */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Coat Measurements</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Length</label>
-              <Input
-                value={measurementData.coatMeasurements.length}
-                onChange={(e) => handleMeasurementChange('coatMeasurements', 'length', e.target.value)}
-                type="number"
-                placeholder="Length"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Chest Around</label>
-              <Input
-                value={measurementData.coatMeasurements.chestAround}
-                onChange={(e) => handleMeasurementChange('coatMeasurements', 'chestAround', e.target.value)}
-                type="number"
-                placeholder="Chest"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Waist</label>
-              <Input
-                value={measurementData.coatMeasurements.waist}
-                onChange={(e) => handleMeasurementChange('coatMeasurements', 'waist', e.target.value)}
-                type="number"
-                placeholder="Waist"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Hip</label>
-              <Input
-                value={measurementData.coatMeasurements.hip}
-                onChange={(e) => handleMeasurementChange('coatMeasurements', 'hip', e.target.value)}
-                type="number"
-                placeholder="Hip"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Shoulder</label>
-              <Input
-                value={measurementData.coatMeasurements.shoulder}
-                onChange={(e) => handleMeasurementChange('coatMeasurements', 'shoulder', e.target.value)}
-                type="number"
-                placeholder="Shoulder"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Sleeve</label>
-              <Input
-                value={measurementData.coatMeasurements.sleeve}
-                onChange={(e) => handleMeasurementChange('coatMeasurements', 'sleeve', e.target.value)}
-                type="number"
-                placeholder="Sleeve"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Biceps</label>
-              <Input
-                value={measurementData.coatMeasurements.biceps}
-                onChange={(e) => handleMeasurementChange('coatMeasurements', 'biceps', e.target.value)}
-                type="number"
-                placeholder="Biceps"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Back</label>
-              <Input
-                value={measurementData.coatMeasurements.back}
-                onChange={(e) => handleMeasurementChange('coatMeasurements', 'back', e.target.value)}
-                type="number"
-                placeholder="Back"
-                required
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Special Notes */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Special Notes
-        </label>
-        <textarea
-          value={measurementData.specialNote}
-          onChange={(e) => setMeasurementData(prev => ({ ...prev, specialNote: e.target.value }))}
-          placeholder="Enter any special notes..."
-          rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        />
-      </div>
-    </div>
-  );
-
-  const renderOrderTab = () => (
-    <div className="space-y-6">
-      {/* Order Information */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Order Date
-          </label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  "w-full justify-start text-left font-normal",
-                  !orderData.orderDate && "text-muted-foreground"
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {orderData.orderDate || "Select date"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={orderData.orderDate ? new Date(orderData.orderDate) : undefined}
-                onSelect={(date) => handleOrderChange('orderDate', date ? date.toISOString().split('T')[0] : '')}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
+  // API mutation for creating/updating orders
+  const createOrderMutation = useAPIMutation({
+    endpoint: 'orders',
+    method: 'POST',
+    onSuccess: (data) => {
+      setIsSubmitting(false)
+      showAlert('Order created successfully!', 'success')
+      // Only close form on successful submission
+      setTimeout(() => onSuccess?.(data), 2000)
+    },
+    onError: (error) => {
+      setIsSubmitting(false)
+      
+      // Handle validation errors - keep form open and show field errors
+      if (error.includes('Validation failed') || error.includes('required')) {
+        const fieldErrors: Record<string, string> = {}
         
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Delivery Date
-          </label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  "w-full justify-start text-left font-normal",
-                  !orderData.deliveryDate && "text-muted-foreground"
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {orderData.deliveryDate || "Select delivery date"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={orderData.deliveryDate ? new Date(orderData.deliveryDate) : undefined}
-                onSelect={(date) => handleOrderChange('deliveryDate', date ? date.toISOString().split('T')[0] : '')}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-      </div>
+        // Parse validation errors and map to specific fields
+        if (error.includes('customerId')) {
+          fieldErrors.customerId = 'Customer is required'
+        }
+        if (error.includes('factoryId')) {
+          fieldErrors.factoryId = 'Factory is required'
+        }
+        if (error.includes('measurementId')) {
+          fieldErrors.measurementId = 'Measurement is required'
+        }
+        if (error.includes('catalogItem')) {
+          fieldErrors['orderItems'] = 'Catalog items are required'
+        }
+        
+        // Set field errors to show red lines - form stays open
+        setErrors(fieldErrors)
+        showAlert('Please fix the validation errors above', 'destructive')
+        
+        // Automatically switch to the tab with errors
+        const tabWithErrors = getTabWithErrors()
+        if (tabWithErrors && tabWithErrors !== activeTab) {
+          setActiveTab(tabWithErrors)
+        }
+      } else {
+        showAlert(`Failed to create order: ${error}`, 'destructive')
+        // Don't close form on other errors either
+      }
+    }
+  })
 
-      {/* Factory Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Factory Selection</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Factory *
-            </label>
-            <select
-              value={orderData.factoryId}
-              onChange={(e) => handleOrderChange('factoryId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
+  const updateOrderMutation = useAPIMutation({
+    endpoint: 'orders',
+    method: 'PATCH',
+    onSuccess: (data) => {
+      setIsSubmitting(false)
+      showAlert('Order updated successfully!', 'success')
+      // Only close form on successful submission
+      setTimeout(() => onSuccess?.(data), 2000)
+    },
+    onError: (error) => {
+      setIsSubmitting(false)
+      
+      // Handle validation errors - keep form open and show field errors
+      if (error.includes('Validation failed') || error.includes('required')) {
+        const fieldErrors: Record<string, string> = {}
+        
+        // Parse validation errors and map to specific fields
+        if (error.includes('customerId')) {
+          fieldErrors.customerId = 'Customer is required'
+        }
+        if (error.includes('factoryId')) {
+          fieldErrors.factoryId = 'Factory is required'
+        }
+        if (error.includes('measurementId')) {
+          fieldErrors.measurementId = 'Measurement is required'
+        }
+        if (error.includes('catalogItem')) {
+          fieldErrors['orderItems'] = 'Catalog items are required'
+        }
+        
+        // Set field errors to show red lines - form stays open
+        setErrors(fieldErrors)
+        showAlert('Please fix the validation errors above', 'destructive')
+        
+        // Automatically switch to the tab with errors
+        const tabWithErrors = getTabWithErrors()
+        if (tabWithErrors && tabWithErrors !== activeTab) {
+          setActiveTab(tabWithErrors)
+        }
+      } else {
+        showAlert(`Failed to update order: ${error}`, 'destructive')
+        // Don't close form on other errors either
+      }
+    }
+  })
+
+  // Use lookup hook for dynamic field detection and data fetching
+  const {
+    lookupOptions,
+    lookupErrors,
+    isLoading: lookupLoading,
+    detectFieldType,
+    formatFieldName,
+    getStatusOptions,
+    fetchLookupOptions,
+    analyzeFormStructure,
+    filterSubmitFields
+  } = useLookup({ 
+    data: mode === 'edit' && initialData ? initialData : (orderData?.orderInfo?.[0] || {
+      customerId: '',
+      factoryId: '',
+      measurementId: '',
+      orderItems: []
+    })
+  })
+
+  // Initialize form when order data is loaded (both create and edit modes)
+  useEffect(() => {
+    try {
+      if (orderData) {
+        const orderInfo = orderData?.orderInfo || []
+        const baseOrder = Array.isArray(orderInfo) && orderInfo.length > 0 
+          ? orderInfo[0] 
+          : {}
+        
+        if (mode === 'edit') {
+          // In edit mode, prioritize initialData over baseOrder
+          if (initialData && Object.keys(initialData).length > 0) {
+            // Use initialData as the primary source, merge with baseOrder for structure
+            const editFormData = { ...baseOrder, ...initialData }
+            setFormData(editFormData)
+            console.log('🔄 Edit mode - initialized with initialData:', editFormData)
+          } else {
+            // Fallback to baseOrder if no initialData provided
+            setFormData(baseOrder)
+            console.log('🔄 Edit mode - no initialData, using baseOrder:', baseOrder)
+          }
+        } else if (mode === 'create') {
+          const createFormData: Record<string, any> = {}
+          
+          Object.keys(baseOrder).forEach(key => {
+            const value = baseOrder[key]
+            const fieldType = detectFieldType(key, value)
+            const isLookupField = fieldType.type === 'lookup'
+            
+            if (key === '_id') {
+              createFormData[key] = ''
+            } else if (isLookupField) {
+              createFormData[key] = ''
+            } else if (Array.isArray(value)) {
+              createFormData[key] = []
+            } else if (typeof value === 'object' && value !== null) {
+              createFormData[key] = {}
+            } else if (typeof value === 'number') {
+              createFormData[key] = 0
+            } else if (typeof value === 'boolean') {
+              createFormData[key] = false
+            } else {
+              createFormData[key] = ''
+            }
+          })
+          
+          setFormData(createFormData)
+        }
+      }
+    } catch (err) {
+      setUiError('Failed to initialize form: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    }
+  }, [orderData, mode, initialData, detectFieldType])
+
+  // Handle initialData changes in edit mode
+  useEffect(() => {
+    if (mode === 'edit' && initialData && Object.keys(initialData).length > 0) {
+      console.log('🔄 Edit mode - initialData changed:', initialData)
+      setFormData(initialData)
+      
+      // Re-analyze form structure with the new initialData
+      analyzeFormStructure(initialData)
+      
+      // Explicitly fetch catalogs for order items
+      fetchLookupOptions('catalogs', {
+        endpoint: 'catalogs',
+        displayField: 'catalogName',
+        entityName: 'catalog'
+      })
+    }
+  }, [initialData, mode, analyzeFormStructure, fetchLookupOptions])
+
+  // Analyze form structure when orderData changes
+  useEffect(() => {
+    const structureData = mode === 'edit' && initialData ? initialData : (orderData?.orderInfo?.[0] || {
+      customerId: '',
+      factoryId: '',
+      measurementId: '',
+      orderItems: []
+    })
+    
+    if (structureData && typeof structureData === 'object' && Object.keys(structureData).length > 0) {
+      analyzeFormStructure(structureData)
+      
+      // Explicitly fetch catalogs for order items
+      fetchLookupOptions('catalogs', {
+        endpoint: 'catalogs',
+        displayField: 'catalogName',
+        entityName: 'catalog'
+      })
+    }
+  }, [orderData, initialData, mode, analyzeFormStructure, fetchLookupOptions])
+
+
+
+  // Simple form state management like dynamic form
+  // const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Simple field change handler like dynamic form
+  const handleFieldChange = (fieldName: string, value: any) => {
+    setFormData(prev => ({ ...prev, [fieldName]: value }))
+    
+    // Clear error for this field when user starts typing/selecting
+    if (errors[fieldName]) {
+      setErrors(prev => {
+        const newErrors = { ...prev }
+        delete newErrors[fieldName]
+        return newErrors
+      })
+    }
+
+    // Real-time validation for required fields
+    const validationErrors: Record<string, string> = {}
+    
+    // Check if the current field is required and validate it
+    if (fieldName === 'customerId' && (!value || (typeof value === 'object' && !value._id) || (typeof value === 'string' && value.trim() === ''))) {
+      validationErrors.customerId = 'Customer is required'
+    }
+    
+    if (fieldName === 'factoryId' && (!value || (typeof value === 'object' && !value._id) || (typeof value === 'string' && value.trim() === ''))) {
+      validationErrors.factoryId = 'Factory is required'
+    }
+    
+    if (fieldName === 'measurementId' && (!value || (typeof value === 'object' && !value._id) || (typeof value === 'string' && value.trim() === ''))) {
+      validationErrors.measurementId = 'Measurement is required'
+    }
+
+    // Update errors with real-time validation
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(prev => ({ ...prev, ...validationErrors }))
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    setIsSubmitting(true)
+    setErrors({})
+    setUiError(null)
+
+    // Instant validation before submission
+    const validationErrors: Record<string, string> = {}
+    
+    // Check required fields
+    if (!formData.customerId || (typeof formData.customerId === 'object' && !formData.customerId._id) || (typeof formData.customerId === 'string' && formData.customerId.trim() === '')) {
+      validationErrors.customerId = 'Customer is required'
+    }
+    
+    if (!formData.factoryId || (typeof formData.factoryId === 'object' && !formData.factoryId._id) || (typeof formData.factoryId === 'string' && formData.factoryId.trim() === '')) {
+      validationErrors.factoryId = 'Factory is required'
+    }
+    
+    if (!formData.measurementId || (typeof formData.measurementId === 'object' && !formData.measurementId._id) || (typeof formData.measurementId === 'string' && formData.measurementId.trim() === '')) {
+      validationErrors.measurementId = 'Measurement is required'
+    }
+
+    // If there are validation errors, show them and stop submission
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors)
+      setIsSubmitting(false)
+      showAlert('Please fix the validation errors above', 'destructive')
+      
+      // Automatically switch to the tab with errors
+      const tabWithErrors = getTabWithErrors()
+      if (tabWithErrors && tabWithErrors !== activeTab) {
+        setActiveTab(tabWithErrors)
+      }
+      
+      return
+    }
+
+    let submissionData = filterSubmitFields(formData)
+    
+    // Convert lookup field objects to ID strings for API submission
+    Object.keys(submissionData).forEach(key => {
+      const value = submissionData[key]
+      if (typeof value === 'object' && value !== null && (value as any)._id) {
+        submissionData[key] = (value as any)._id
+      } else if (Array.isArray(value)) {
+        submissionData[key] = value.map((item: any) => {
+          if (typeof item === 'object' && item !== null) {
+            const processedItem = { ...item }
+            // Handle catalogId field specifically for orderItems
+            if (processedItem.catalogId && typeof processedItem.catalogId === 'object') {
+              processedItem.catalogId = (processedItem.catalogId as any)._id || (processedItem.catalogId as any).id
+            }
+            // Handle catalogItem field for backward compatibility
+            if (processedItem.catalogItem && typeof processedItem.catalogItem === 'object') {
+              processedItem.catalogItem = (processedItem.catalogItem as any)._id || (processedItem.catalogItem as any).id
+            }
+            return processedItem
+          }
+          return item
+        })
+      }
+    })
+    
+    // For edit mode, include the ID in the submission data
+    if (mode === 'edit' && formData._id) {
+      submissionData = { ...submissionData, _id: formData._id }
+    }
+        
+    if (!submissionData || Object.keys(submissionData).length === 0) {
+      const testData = {
+        customerId: 'test-customer-id',
+        orderDate: new Date().toISOString().split('T')[0],
+        status: 'DRAFT',
+        _id: mode === 'edit' ? formData._id : undefined
+      }
+      
+      if (mode === 'create') {
+        await createOrderMutation.mutateAsync(testData)
+      } else {
+        await updateOrderMutation.mutateAsync(testData)
+      }
+      return
+    }
+
+    try {
+      if (mode === 'create') {
+        await createOrderMutation.mutateAsync(submissionData)
+      } else {
+        const orderId = formData._id
+        if (!orderId) {
+          setUiError('Order ID is required for updates')
+          setIsSubmitting(false)
+          return
+        }
+        
+        await updateOrderMutation.mutateAsync({
+          ...submissionData,
+          _id: orderId
+        })
+      }
+    } catch (error: any) {
+      setUiError(`Form submission failed: ${error?.message || 'Unknown error occurred'}`)
+      setIsSubmitting(false)
+    }
+  }
+
+  const renderField = (fieldName: string, value: any) => {
+    try {
+      const error = errors && errors[fieldName]
+      const fieldType = detectFieldType(fieldName, value)
+      const label = formatFieldName(fieldName)
+      const placeholder = `Enter ${label.toLowerCase()}`
+      
+      if (['_id', '__v', 'createdAt', 'updatedAt', 'isDeleted'].includes(fieldName)) {
+        return null
+      }
+
+      // Show skeleton for loading fields
+      if (lookupLoading && fieldType.type === 'lookup') {
+        return (
+          <div key={fieldName} className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        )
+      }
+
+      if (fieldType.type === 'lookup') {
+        const options = (lookupOptions && lookupOptions[fieldName]) || []
+        const fieldLabel = formatFieldName(fieldName)
+        
+        let currentValue = ''
+        let displayValue = ''
+        
+        if (typeof value === 'object' && value !== null) {
+          currentValue = value._id || value.id || ''
+          displayValue = value.name || value.label || value.brandName || currentValue
+        } else if (typeof value === 'string') {
+          currentValue = value
+          displayValue = value
+        }
+        
+        return (
+          <div key={fieldName} className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">{fieldLabel}</label>
+            <Select
+              value={currentValue || ''}
+              onValueChange={(val) => {
+                const selectedItem = options.find((item: any) => item.id === val) as any
+                
+                let newValue: any
+                if (selectedItem) {
+                  newValue = {
+                    _id: val,
+                    name: selectedItem.name || selectedItem.label || selectedItem.brandName,
+                    ...(selectedItem.codeNumber && { codeNumber: selectedItem.codeNumber }),
+                    ...(selectedItem.pricePerMeter && { pricePerMeter: selectedItem.pricePerMeter })
+                  }
+                } else {
+                  newValue = val
+                }
+                
+                handleFieldChange(fieldName, newValue)
+              }}
+              disabled={lookupLoading}
             >
-              <option value="">Select factory</option>
-              {factories.map((factory) => (
-                <option key={factory._id} value={factory._id}>
-                  {factory.name || factory.factoryName || factory.title || `Factory ${factory._id}`}
-                </option>
-              ))}
-            </select>
-            {orderData.factoryId && (
-              <p className="text-sm text-gray-500 mt-1">
-                Selected: {factories.find(f => f._id === orderData.factoryId)?.name || 
-                          factories.find(f => f._id === orderData.factoryId)?.factoryName || 
-                          `Factory ${orderData.factoryId}`}
+              <SelectTrigger className={`h-10 ${error ? 'border-red-500' : ''}`}>
+                <SelectValue placeholder={lookupLoading ? `Loading ${fieldLabel.toLowerCase()}...` : `Select ${fieldLabel.toLowerCase()}`}>
+                  {displayValue || `Select ${fieldLabel.toLowerCase()}`}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {lookupLoading ? (
+                  <SelectItem value="loading" disabled>
+                    Loading {fieldLabel.toLowerCase()}...
+                  </SelectItem>
+                ) : (lookupErrors && lookupErrors[fieldName]) ? (
+                  <SelectItem value="error" disabled>
+                    Error loading {fieldLabel.toLowerCase()}
+                  </SelectItem>
+                ) : options.length > 0 ? (
+                  options.map((item: any) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.label || item.name || item.brandName || `${fieldLabel} ${item.id}`}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="empty" disabled>
+                    No {fieldLabel.toLowerCase()} available
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            {error && (
+              <p className="text-red-500 text-sm flex items-center gap-1">
+                <AlertCircle className="h-4 w-4" />
+                {error}
+              </p>
+            )}
+            {lookupErrors && lookupErrors[fieldName] && (
+              <p className="text-red-500 text-sm flex items-center gap-1">
+                <AlertCircle className="h-4 w-4" />
+                Failed to load {fieldLabel.toLowerCase()}: {lookupErrors[fieldName]}
               </p>
             )}
           </div>
-        </CardContent>
-      </Card>
+        )
+      }
 
-      {/* Order Items */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Order Items</CardTitle>
-            <Button type="button" onClick={addItem} variant="outline" size="sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Item
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {orderData.orderItems.map((item, index) => (
-            <div key={index} className="border rounded-lg p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h4 className="font-medium">Item {index + 1}</h4>
-                {orderData.orderItems.length > 1 && (
+      switch (fieldType.type) {
+        case 'text':
+          return (
+            <div key={fieldName} className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">{label}</label>
+              <Input
+                type="text"
+                value={value || ''}
+                onChange={(e) => {
+                  const newValue = e.target.value
+                  handleFieldChange(fieldName, newValue)
+                }}
+                placeholder={placeholder}
+                className={`h-10 ${error ? 'border-red-500' : ''}`}
+              />
+              {error && (
+                <p className="text-red-500 text-sm flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  {error}
+                </p>
+              )}
+            </div>
+          )
+
+        case 'number':
+          return (
+            <div key={fieldName} className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">{label}</label>
+              <Input
+                type="number"
+                value={value || ''}
+                onChange={(e) => {
+                  const newValue = parseFloat(e.target.value) || 0
+                  handleFieldChange(fieldName, newValue)
+                }}
+                placeholder={placeholder}
+                className={`h-10 ${error ? 'border-red-500' : ''}`}
+                min={0}
+                step={0.01}
+              />
+              {error && (
+                <p className="text-red-500 text-sm flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  {error}
+                </p>
+              )}
+            </div>
+          )
+
+        case 'date':
+          return (
+            <div key={fieldName} className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">{label}</label>
+              <Input
+                type="date"
+                value={value || ''}
+                onChange={(e) => {
+                  const newValue = e.target.value
+                  handleFieldChange(fieldName, newValue)
+                }}
+                className={`h-10 ${error ? 'border-red-500' : ''}`}
+              />
+              {error && (
+                <p className="text-red-500 text-sm flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  {error}
+                </p>
+              )}
+            </div>
+          )
+
+        case 'status':
+          const statusOptions = getStatusOptions(fieldName) || []
+          
+          return (
+            <div key={fieldName} className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">{label}</label>
+              <Select
+                value={value || ''}
+                onValueChange={(val) => {
+                  handleFieldChange(fieldName, val)
+                }}
+              >
+                <SelectTrigger className={`h-10 ${error ? 'border-red-500' : ''}`}>
+                  <SelectValue placeholder={placeholder} />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.isArray(statusOptions) && statusOptions.length > 0 ? (
+                    statusOptions.map((option: string) => (
+                      <SelectItem key={option} value={option}>
+                        {option.charAt(0).toUpperCase() + option.slice(1)}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-options" disabled>
+                      No status options available
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              {error && (
+                <p className="text-red-500 text-sm flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  {error}
+                </p>
+              )}
+            </div>
+          )
+
+        case 'array':
+          const arrayItems = value || []
+          
+          // Special handling for orderItems array
+          if (fieldName === 'orderItems') {
+            return (
+              <div key={fieldName} className="space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800">{label}</h3>
                   <Button
                     type="button"
-                    onClick={() => removeItem(index)}
                     variant="outline"
                     size="sm"
-                    className="text-red-600 hover:text-red-700"
+                    onClick={() => {
+                      const newItem = {
+                        itemType: 'COAT',
+                        itemName: '',
+                        catalogId: null
+                      }
+                      
+                      const newArray = [...arrayItems, newItem]
+                      handleFieldChange(fieldName, newArray)
+                    }}
+                    className="flex items-center gap-2 bg-primary-50 hover:bg-primary-100 text-primary-700 border-primary-200"
                   >
-                    <X className="w-4 h-4" />
+                    <Plus className="h-4 w-4" />
+                    Add Order Item
                   </Button>
-                )}
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Item Type *
-                  </label>
-                  <select
-                    value={item.itemType}
-                    onChange={(e) => handleItemChange(index, 'itemType', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  >
-                    {itemTypes.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Item Name *
-                  </label>
-                  <Input
-                    value={item.itemName}
-                    onChange={(e) => handleItemChange(index, 'itemName', e.target.value)}
-                    placeholder="Enter item name"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Catalog Item *
-                  </label>
-                  <select
-                    value={item.catalogItem}
-                    onChange={(e) => handleItemChange(index, 'catalogItem', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  >
-                    <option value="">Select catalog item</option>
-                    {catalogs.map((catalog) => (
-                      <option key={catalog._id} value={catalog._id}>
-                        {catalog.name || catalog.itemName || `Catalog ${catalog._id}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* Measurement Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Measurement Selection</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Measurement *
-            </label>
-            <select
-              value={orderData.measurementId}
-              onChange={(e) => {
-                handleOrderChange('measurementId', e.target.value);
-                // Auto-fill measurement ID when measurement is selected
-                if (e.target.value) {
-                  setMeasurementId(e.target.value);
-                }
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value="">Select measurement</option>
-              {filteredMeasurements.map((measurement) => (
-                <option key={measurement._id} value={measurement._id}>
-                  {measurement.customerName || measurement.name || `Measurement ${measurement._id}`} 
-                  {' - '}
-                  {getMeasurementTypeDescription(measurement.measurementType)}
-                </option>
-              ))}
-            </select>
-            {filteredMeasurements.length === 0 && measurements.length > 0 && (
-              <p className="text-sm text-orange-600 mt-1">
-                No compatible measurements found for the selected item types. 
-                Please add measurements for: {orderData.orderItems.map(item => getMeasurementTypeForItem(item.itemType)).join(', ')}
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Order Status */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Order Status</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Order Status
-              </label>
-              <select
-                value={orderData.orderStatus}
-                onChange={(e) => handleOrderChange('orderStatus', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="Pending">Pending</option>
-                <option value="Cutting">Cutting</option>
-                <option value="Sewing">Sewing</option>
-                <option value="Ready">Ready</option>
-                <option value="Delivered">Delivered</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Payment Status
-              </label>
-              <select
-                value={orderData.paymentStatus}
-                onChange={(e) => handleOrderChange('paymentStatus', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="Unpaid">Unpaid</option>
-                <option value="Paid">Paid</option>
-                <option value="Partial">Partial</option>
-              </select>
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Total Amount
-            </label>
-            <Input
-              value={orderData.totalGrossAmount}
-              onChange={(e) => handleOrderChange('totalGrossAmount', e.target.value)}
-              placeholder="Enter total amount"
-              type="number"
-              step="0.01"
-              min="0"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Notes
-            </label>
-            <textarea
-              value={orderData.notes}
-              onChange={(e) => handleOrderChange('notes', e.target.value)}
-              placeholder="Enter any additional notes..."
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl mx-auto max-h-[95vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="bg-primary text-primary-foreground p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">
-                {isEdit ? 'Edit Order' : 'Create New Order'}
-              </h1>
-              <p className="text-blue-100 mt-1">
-                {activeTab === 'customer' && 'Step 1: Customer Information'}
-                {activeTab === 'measurement' && 'Step 2: Measurement Details'}
-                {activeTab === 'order' && 'Step 3: Order Details'}
-              </p>
-            </div>
-            {onClose && (
-              <Button 
-                variant="ghost" 
-                onClick={onClose} 
-                size="sm" 
-                className="text-white hover:bg-blue-700 rounded-full p-2"
-              >
-                <X className="w-5 h-5" />
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="bg-muted px-4 sm:px-6 py-3 sm:py-4 border-b">
-          <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-            <button
-              onClick={() => setActiveTab('customer')}
-              className={cn(
-                "flex items-center gap-2 sm:gap-3 px-3 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 min-w-fit",
-                activeTab === 'customer'
-                  ? "bg-primary text-primary-foreground shadow-md"
-                  : "text-gray-600 hover:text-gray-800 hover:bg-gray-100"
-              )}
-            >
-              <div className={cn(
-                "w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-xs font-bold",
-                activeTab === 'customer' ? "bg-white text-primary" : "bg-gray-300 text-gray-600"
-              )}>
-                1
-              </div>
-              <span className="hidden sm:inline">Customer</span>
-              <span className="sm:hidden">Cust</span>
-              {customerId && (
-                <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500" />
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('measurement')}
-              className={cn(
-                "flex items-center gap-2 sm:gap-3 px-3 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 min-w-fit",
-                activeTab === 'measurement'
-                  ? "bg-primary text-primary-foreground shadow-md"
-                  : "text-gray-600 hover:text-gray-800 hover:bg-gray-100"
-              )}
-            >
-              <div className={cn(
-                "w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-xs font-bold",
-                activeTab === 'measurement' ? "bg-white text-primary" : "bg-gray-300 text-gray-600"
-              )}>
-                2
-              </div>
-              <span className="hidden sm:inline">Measurement</span>
-              <span className="sm:hidden">Meas</span>
-              {measurementId && (
-                <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500" />
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('order')}
-              className={cn(
-                "flex items-center gap-2 sm:gap-3 px-3 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 min-w-fit",
-                activeTab === 'order'
-                  ? "bg-primary text-primary-foreground shadow-md"
-                  : "text-gray-600 hover:text-gray-800 hover:bg-gray-100"
-              )}
-            >
-              <div className={cn(
-                "w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-xs font-bold",
-                activeTab === 'order' ? "bg-white text-primary" : "bg-gray-300 text-gray-600"
-              )}>
-                3
-              </div>
-              <span className="hidden sm:inline">Order</span>
-              <span className="sm:hidden">Order</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-muted scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
-          <div className="w-full p-3 sm:p-6">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 min-h-[500px] sm:min-h-[600px]">
-              <div className="p-4 sm:p-6">
-                {activeTab === 'customer' && renderCustomerTab()}
-                {activeTab === 'measurement' && renderMeasurementTab()}
-                {activeTab === 'order' && renderOrderTab()}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer Actions */}
-        <div className="bg-muted px-6 py-4 border-t">
-          <div className="flex justify-between items-center">
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (activeTab === 'measurement') setActiveTab('customer');
-                if (activeTab === 'order') setActiveTab('measurement');
-              }}
-              disabled={activeTab === 'customer'}
-              className="px-6 py-2"
-            >
-              <ChevronLeft className="w-4 h-4 mr-2" />
-              Previous
-            </Button>
-            
-            <div className="flex gap-3">
-              {activeTab === 'customer' && (
-                                  <Button
-                    type="button"
-                    onClick={handleSaveCustomer}
-                    disabled={!customerData.name || !customerData.contactNum || !customerData.dob || loading}
-                  >
-                  {loading ? (
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Saving Customer...
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Save className="w-4 h-4" />
-                      Save Customer & Continue
-                    </div>
-                  )}
-                </Button>
-              )}
-              {activeTab === 'measurement' && (
-                                  <Button
-                    type="button"
-                    onClick={handleSaveMeasurement}
-                    disabled={!measurementData.measurementType || loading}
-                  >
-                  {loading ? (
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Saving Measurement...
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Save className="w-4 h-4" />
-                      Save Measurement & Continue
-                    </div>
-                  )}
-                </Button>
-              )}
-              {activeTab === 'order' && (
-                <form onSubmit={handleSubmitOrder} className="flex gap-3">
-                  {onClose && (
-                    <Button type="button" variant="outline" onClick={onClose}>
-                      Cancel
-                    </Button>
-                  )}
-                  <Button 
-                    type="submit" 
-                    disabled={loading}
-                  >
-                    {loading ? (
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Creating Order...
+                <div className="space-y-4">
+                  {arrayItems.map((item: any, index: number) => (
+                    <div key={index} className="bg-white border border-gray-200 rounded-lg p-4 space-y-4 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-gray-700">Order Item {index + 1}</h4>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const newArray = arrayItems.filter((_: any, i: number) => i !== index)
+                            handleFieldChange(fieldName, newArray)
+                          }}
+                          className="text-red-500 hover:text-red-700 border-red-200 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4" />
-                        Create Order
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {/* Item Type */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Item Type</label>
+                          <Select
+                            value={item.itemType || ''}
+                            onValueChange={(val) => {
+                              const newArray = [...arrayItems]
+                              newArray[index] = { ...newArray[index], itemType: val }
+                              handleFieldChange(fieldName, newArray)
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select item type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="COAT">Coat</SelectItem>
+                              <SelectItem value="PANT">Pant</SelectItem>
+                              <SelectItem value="WAIST_COAT">Waist Coat</SelectItem>
+                              <SelectItem value="DAURA">Daura</SelectItem>
+                              <SelectItem value="SHIRT">Shirt</SelectItem>
+                              <SelectItem value="SUIT">Suit</SelectItem>
+                              <SelectItem value="DRESS">Dress</SelectItem>
+                              <SelectItem value="OTHER">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        {/* Item Name */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Item Name</label>
+                          <Input
+                            type="text"
+                            value={item.itemName || ''}
+                            onChange={(e) => {
+                              const newArray = [...arrayItems]
+                              newArray[index] = { ...newArray[index], itemName: e.target.value }
+                              handleFieldChange(fieldName, newArray)
+                            }}
+                            placeholder="Enter item name"
+                          />
+                        </div>
+                        
+                                                 {/* Catalog Selection */}
+                         <div>
+                           <label className="block text-sm font-medium mb-2">Catalog Item</label>
+                           <Select
+                             value={(() => {
+                               const catalogValue = item.catalogId?._id || item.catalogId || '';
+                               return catalogValue;
+                             })()}
+                             onValueChange={(val) => {
+                               // Find the catalog from any available catalog lookup options
+                               const catalogOptions = Object.entries(lookupOptions || {}).find(([key, options]) => 
+                                 key.includes('catalog') && Array.isArray(options) && options.length > 0
+                               )?.[1] || []
+                               
+                               console.log('🔍 Catalog selection - val:', val, 'catalogOptions:', catalogOptions, 'lookupOptions keys:', Object.keys(lookupOptions || {}))
+                               
+                               const selectedCatalog = catalogOptions.find((c: any) => c.id === val) as any
+                               
+                               const newArray = [...arrayItems]
+                               newArray[index] = { 
+                                 ...newArray[index], 
+                                 catalogId: selectedCatalog ? {
+                                   _id: val,
+                                   catalogName: selectedCatalog.label.split(' - ')[0] || selectedCatalog.label,
+                                   codeNumber: selectedCatalog.label.split(' - ')[1] || '',
+                                   // Note: Other fields like pricePerMeter, quantityAvailable, etc. 
+                                   // would need to be fetched separately or included in the lookup options
+                                 } : val
+                               }
+                               handleFieldChange(fieldName, newArray)
+                             }}
+                             disabled={lookupLoading}
+                           >
+                             <SelectTrigger className="h-10">
+                               <SelectValue placeholder={lookupLoading ? "Loading catalogs..." : "Select catalog item"} />
+                             </SelectTrigger>
+                             <SelectContent>
+                               {lookupLoading ? (
+                                 <SelectItem value="loading" disabled>
+                                   Loading catalogs...
+                                 </SelectItem>
+                               ) : (() => {
+                                 // Find any catalog-related errors
+                                 const catalogError = Object.entries(lookupErrors || {}).find(([key, error]) => 
+                                   key.includes('catalog')
+                                 )?.[1]
+                                 
+                                 if (catalogError) {
+                                   return <SelectItem value="error" disabled>No  Catalogs </SelectItem>
+                                 }
+                                 
+                                 // Find catalog options from any available lookup
+                                 const catalogOptions = Object.entries(lookupOptions || {}).find(([key, options]) => 
+                                   key.includes('catalog') && Array.isArray(options) && options.length > 0
+                                 )?.[1] || []
+                                 
+                                 console.log('🔍 Catalog options in SelectContent:', catalogOptions, 'all lookupOptions keys:', Object.keys(lookupOptions || {}))
+                                 
+                                 if (catalogOptions.length > 0) {
+                                   return catalogOptions.map((catalog: any) => (
+                                     <SelectItem key={catalog.id} value={catalog.id}>
+                                       {catalog.label}
+                                     </SelectItem>
+                                   ))
+                                 } else {
+                                   return <SelectItem value="empty" disabled>No catalogs available</SelectItem>
+                                 }
+                               })()}
+                             </SelectContent>
+                           </Select>
+                           {(() => {
+                             // Find any catalog-related errors
+                             const catalogError = Object.entries(lookupErrors || {}).find(([key, error]) => 
+                               key.includes('catalog')
+                             )?.[1]
+                             
+                             if (catalogError) {
+                               return (
+                                 <p className="text-red-500 text-sm flex items-center gap-1 mt-1">
+                                   <AlertCircle className="h-4 w-4" />
+                                   Failed to load catalogs: {catalogError}
+                                 </p>
+                               )
+                             }
+                             return null
+                           })()}
+                         </div>
                       </div>
-                    )}
-                  </Button>
-                </form>
+                      
+                      {/* Catalog Details Display */}
+                      {item.catalogId && typeof item.catalogId === 'object' && (
+                        <div className="bg-gray-50 p-3 rounded-lg">
+                          <h5 className="font-medium text-sm text-gray-700 mb-2">Catalog Details</h5>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                            <div>
+                              <span className="text-gray-500">Name:</span>
+                              <span className="ml-1 font-medium">{item.catalogId.catalogName || 'N/A'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Code:</span>
+                              <span className="ml-1 font-medium">{item.catalogId.codeNumber || 'N/A'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Price/Meter:</span>
+                              <span className="ml-1 font-medium">
+                                {item.catalogId.pricePerMeter ? `₹${item.catalogId.pricePerMeter}` : 'N/A'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Available:</span>
+                              <span className="ml-1 font-medium">
+                                {item.catalogId.quantityAvailable?.value 
+                                  ? `${item.catalogId.quantityAvailable.value} ${item.catalogId.quantityAvailable.unit || ''}`
+                                  : 'N/A'
+                                }
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          }
+          
+          // Generic array handling for other arrays
+          return (
+            <div key={fieldName} className="space-y-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">{label}</h3>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const newItem = arrayItems.length > 0 
+                      ? { ...arrayItems[0], _id: undefined }
+                      : { itemType: 'COAT', itemName: '' }
+                    
+                    const newArray = [...arrayItems, newItem]
+                    handleFieldChange(fieldName, newArray)
+                  }}
+                  className="flex items-center gap-2 bg-primary-50 hover:bg-primary-100 text-primary-700 border-primary-200"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Item
+                </Button>
+              </div>
+              <div className="space-y-4">
+                {arrayItems.map((item: any, index: number) => (
+                  <div key={index} className="bg-white border border-gray-200 rounded-lg p-4 space-y-4 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-gray-700">Item {index + 1}</h4>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const newArray = arrayItems.filter((_: any, i: number) => i !== index)
+                          handleFieldChange(fieldName, newArray)
+                        }}
+                        className="text-red-500 hover:text-red-700 border-red-200 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Item Type</label>
+                        <Select
+                          value={item.itemType || ''}
+                          onValueChange={(val) => {
+                            const newArray = [...arrayItems]
+                            newArray[index] = { ...newArray[index], itemType: val }
+                            handleFieldChange(fieldName, newArray)
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select item type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="COAT">Coat</SelectItem>
+                            <SelectItem value="PANT">Pant</SelectItem>
+                            <SelectItem value="WAIST_COAT">Waist Coat</SelectItem>
+                            <SelectItem value="DAURA">Daura</SelectItem>
+                            <SelectItem value="SHIRT">Shirt</SelectItem>
+                            <SelectItem value="SUIT">Suit</SelectItem>
+                            <SelectItem value="DRESS">Dress</SelectItem>
+                            <SelectItem value="OTHER">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Item Name</label>
+                        <Input
+                          type="text"
+                          value={item.itemName || ''}
+                          onChange={(e) => {
+                            const newArray = [...arrayItems]
+                            newArray[index] = { ...newArray[index], itemName: e.target.value }
+                            handleFieldChange(fieldName, newArray)
+                          }}
+                          placeholder="Enter item name"
+                        />
+                      </div>
+                                             <div>
+                         <label className="block text-sm font-medium mb-2">Catalog Item</label>
+                         <Select
+                           value={(() => {
+                             const catalogValue = item.catalogId?._id || item.catalogId || '';
+                             console.log('🔍 Catalog Select value (section 2):', catalogValue, 'item.catalogId:', item.catalogId);
+                             return catalogValue;
+                           })()}
+                           onValueChange={(val) => {
+                             // Find the catalog from any available catalog lookup options
+                             const catalogOptions = Object.entries(lookupOptions || {}).find(([key, options]) => 
+                               key.includes('catalog') && Array.isArray(options) && options.length > 0
+                             )?.[1] || []
+                             
+                             console.log('🔍 Catalog selection (section 2) - val:', val, 'catalogOptions:', catalogOptions, 'lookupOptions keys:', Object.keys(lookupOptions || {}))
+                             
+                             const selectedCatalog = catalogOptions.find((c: any) => c.id === val) as any
+                             
+                             const newArray = [...arrayItems]
+                             newArray[index] = { 
+                               ...newArray[index], 
+                               catalogId: selectedCatalog ? {
+                                 _id: val,
+                                 catalogName: selectedCatalog.label.split(' - ')[0] || selectedCatalog.label,
+                                 codeNumber: selectedCatalog.label.split(' - ')[1] || '',
+                                 // Note: Other fields like pricePerMeter, quantityAvailable, etc. 
+                                 // would need to be fetched separately or included in the lookup options
+                               } : val
+                             }
+                             handleFieldChange(fieldName, newArray)
+                           }}
+                           disabled={lookupLoading}
+                         >
+                           <SelectTrigger className="h-10">
+                             <SelectValue placeholder={lookupLoading ? "Loading catalogs..." : "Select catalog item"} />
+                           </SelectTrigger>
+                           <SelectContent>
+                             {lookupLoading ? (
+                               <SelectItem value="loading" disabled>
+                                 Loading catalogs...
+                               </SelectItem>
+                             ) : (() => {
+                               // Find any catalog-related errors
+                               const catalogError = Object.entries(lookupErrors || {}).find(([key, error]) => 
+                                 key.includes('catalog')
+                               )?.[1]
+                               
+                               if (catalogError) {
+                                 return <SelectItem value="error" disabled>Error loading catalogs</SelectItem>
+                               }
+                               
+                               // Find catalog options from any available lookup
+                               const catalogOptions = Object.entries(lookupOptions || {}).find(([key, options]) => 
+                                 key.includes('catalog') && Array.isArray(options) && options.length > 0
+                               )?.[1] || []
+                               
+                               console.log('🔍 Catalog options in SelectContent (section 2):', catalogOptions, 'all lookupOptions keys:', Object.keys(lookupOptions || {}))
+                               
+                               if (catalogOptions.length > 0) {
+                                 return catalogOptions.map((catalog: any) => (
+                                   <SelectItem key={catalog.id} value={catalog.id}>
+                                     {catalog.label}
+                                   </SelectItem>
+                                 ))
+                               } else {
+                                 return <SelectItem value="empty" disabled>No catalogs available</SelectItem>
+                               }
+                             })()}
+                           </SelectContent>
+                         </Select>
+                         {(() => {
+                           // Find any catalog-related errors
+                           const catalogError = Object.entries(lookupErrors || {}).find(([key, error]) => 
+                             key.includes('catalog')
+                           )?.[1]
+                           
+                           if (catalogError) {
+                             return (
+                               <p className="text-red-500 text-sm flex items-center gap-1 mt-1">
+                                 <AlertCircle className="h-4 w-4" />
+                                 Failed to load catalogs: {catalogError}
+                               </p>
+                             )
+                           }
+                           return null
+                         })()}
+                       </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+
+        default:
+          return (
+            <div key={fieldName} className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">{label}</label>
+              <Input
+                type="text"
+                value={value || ''}
+                onChange={(e) => {
+                  const newValue = e.target.value
+                  handleFieldChange(fieldName, newValue)
+                }}
+                placeholder={placeholder}
+                className={`h-10 ${error ? 'border-red-500' : ''}`}
+              />
+              {error && (
+                <p className="text-red-500 text-sm flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  {error}
+                </p>
               )}
             </div>
+          )
+      }
+    } catch (error) {
+      setUiError(`Error rendering field ${fieldName}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      return (
+        <div key={fieldName} className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">{fieldName}</label>
+          <Input
+            type="text"
+            value={value || ''}
+            onChange={(e) => {
+              const newValue = e.target.value
+              handleFieldChange(fieldName, newValue)
+            }}
+            placeholder={`Enter ${fieldName}`}
+            className="h-10"
+          />
+        </div>
+      )
+    }
+  }
+
+  // Dynamic field grouping based on field types and names
+  const getFieldGroups = useCallback(() => {
+    if (!formData || typeof formData !== 'object' || Object.keys(formData || {}).length === 0) {
+      return {}
+    }
+    
+    const groups: Record<string, string[]> = {
+      basic: [],
+      items: [],
+      details: [],
+      additional: []
+    }
+    
+    Object.entries(formData || {}).forEach(([fieldName, value]) => {
+      try {
+        const fieldType = detectFieldType(fieldName, value)
+        const lowerFieldName = fieldName.toLowerCase()
+        
+        if (['_id', '__v', 'createdAt', 'updatedAt', 'isDeleted'].includes(fieldName)) {
+          return
+        }
+        
+        if (lowerFieldName.includes('item') || fieldName === 'orderItems' || (fieldType && fieldType.type === 'array')) {
+          groups.items.push(fieldName)
+        } else if (
+          lowerFieldName.includes('date') || 
+          lowerFieldName.includes('status') || 
+          lowerFieldName.includes('payment') ||
+          lowerFieldName.includes('amount') ||
+          lowerFieldName.includes('total') ||
+          lowerFieldName.includes('price')
+        ) {
+          groups.details.push(fieldName)
+        } else if (
+          lowerFieldName.includes('customer') ||
+          lowerFieldName.includes('factory') ||
+          lowerFieldName.includes('measurement') ||
+          lowerFieldName.includes('vendor') ||
+          lowerFieldName.includes('contact')
+        ) {
+          groups.basic.push(fieldName)
+        } else {
+          groups.additional.push(fieldName)
+        }
+      } catch (error) {
+        groups.additional.push(fieldName)
+      }
+    })
+    
+    return groups
+  }, [formData])
+
+  // Function to determine which tab contains validation errors
+  const getTabWithErrors = useCallback(() => {
+    if (!errors || Object.keys(errors).length === 0) return null
+    
+    const fieldGroups = getFieldGroups()
+    
+    // Check which tab contains the fields with errors
+    for (const [tabId, fields] of Object.entries(fieldGroups)) {
+      const hasErrors = fields.some(fieldName => errors[fieldName])
+      if (hasErrors) {
+        return tabId
+      }
+    }
+    
+    return null
+  }, [errors, getFieldGroups])
+
+  // Function to check if a tab has errors
+  const tabHasErrors = useCallback((tabId: string) => {
+    if (!errors || Object.keys(errors).length === 0) return false
+    
+    const fieldGroups = getFieldGroups()
+    const fields = fieldGroups[tabId] || []
+    return fields.some(fieldName => errors[fieldName])
+  }, [errors, getFieldGroups])
+
+// Data-driven tab configuration
+  const getTabConfig = useCallback(() => {
+    try {
+      const fieldGroups = getFieldGroups()
+      
+      return [
+        {
+          id: 'basic',
+          label: 'Basic Info',
+          icon: FileText,
+          fields: fieldGroups.basic || [],
+          description: 'Customer, factory, and measurement information'
+        },
+        {
+          id: 'items',
+          label: 'Order Items',
+          icon: ShoppingCart,
+          fields: fieldGroups.items || [],
+          description: 'Products and items in the order'
+        },
+        {
+          id: 'details',
+          label: 'Order Details',
+          icon: Calendar,
+          fields: fieldGroups.details || [],
+          description: 'Dates, status, and payment information'
+        },
+        {
+          id: 'additional',
+          label: 'Additional Info',
+          icon: FileText,
+          fields: fieldGroups.additional || [],
+          description: 'Notes and additional information'
+        }
+      ].filter(tab => Array.isArray(tab.fields) && tab.fields.length > 0)
+    } catch (error) {
+      return []
+    }
+  }, [getFieldGroups])
+
+
+
+  if (orderLoading || lookupLoading || !formData || typeof formData !== 'object') {
+    return <FormSkeleton />
+  }
+
+  if (orderError) {
+    showAlert(`Failed to load order form: ${orderError}`, 'destructive')
+    return (
+      <div className="fixed top-4 right-4 z-50">
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
           </div>
         </div>
       </div>
+    )
+  }
+
+  if (!formData || typeof formData !== 'object') {
+    showAlert('No order data available - Unable to load order form structure', 'destructive')
+    return (
+      <div className="fixed top-4 right-4 z-50">
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+            <span className="ml-3 text-lg">Loading order form...</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+      {/* Success Alert - Moved to top center for better visibility */}
+      {/* Removed successMessage state, so this block is no longer needed */}
+      
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-primary rounded-lg shadow-sm">
+              <Package className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">
+                {mode === 'create' ? 'Create New Order' : 'Edit Order'}
+              </h2>
+              <p className="text-sm text-gray mt-1">
+                {mode === 'create' ? 'Fill in the details to create a new order' : 'Update the order information'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onCancel}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            disabled={isLoading}
+          >
+            <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Form Content */}
+        <form onSubmit={handleSubmit} className="flex flex-col h-full relative">
+          {/* Tab Navigation */}
+          <div className="border-b border-gray-200 bg-gray-50">
+            <div className="flex space-x-1 p-4">
+              {(getTabConfig() || []).map((tab: any) => {
+                const hasErrors = tabHasErrors(tab.id)
+                const isErrorTab = getTabWithErrors() === tab.id
+                
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors relative ${
+                      activeTab === tab.id
+                        ? 'bg-white text-primary shadow-sm border border-gray-200'
+                        : 'text-gray hover:text-gray-800 hover:bg-gray-100'
+                    }`}
+                    style={{
+                      animation: isErrorTab && hasErrors ? 'blink 1.5s ease-in-out infinite' : 'none',
+                      backgroundColor: isErrorTab && hasErrors ? 'rgb(254 242 242)' : undefined,
+                      borderColor: isErrorTab && hasErrors ? 'rgb(254 202 202)' : undefined,
+                      color: isErrorTab && hasErrors ? 'rgb(220 38 38)' : undefined,
+                      boxShadow: isErrorTab && hasErrors ? '0 0 0 3px rgb(254 202 202 / 0.3)' : undefined
+                    }}
+                  >
+                    <tab.icon className="h-4 w-4" />
+                    {tab.label}
+                    {hasErrors && (
+                      <div className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full animate-pulse"></div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Add CSS for blinking animation */}
+          <style dangerouslySetInnerHTML={{
+            __html: `
+              @keyframes blink {
+                0%, 50% {
+                  background-color: rgb(254 242 242) !important;
+                  border-color: rgb(254 202 202) !important;
+                  color: rgb(220 38 38) !important;
+                  box-shadow: 0 0 0 3px rgb(254 202 202 / 0.3) !important;
+                }
+                25%, 75% {
+                  background-color: rgb(239 68 68) !important;
+                  border-color: rgb(239 68 68) !important;
+                  color: white !important;
+                  box-shadow: 0 0 0 3px rgb(239 68 68 / 0.5) !important;
+                }
+              }
+            `
+          }} />
+
+          {/* Tab Content */}
+          <div className="flex-1 overflow-y-auto p-6 max-h-[60vh]">
+            {(getTabConfig() || []).map((tab: any) => (
+              <div key={tab.id} className={`${activeTab === tab.id ? 'block' : 'hidden'}`}>
+                <h3 className="text-lg font-semibold mb-4 text-gray-800">{tab.label}</h3>
+                <div className="grid grid-cols-1 gap-4">
+                  {tab.fields.map((fieldName: string) => renderField(fieldName, formData[fieldName]))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between p-6 border-t border-gray-200">
+            <div className="flex items-center gap-2 text-sm text-gray">
+              <span>{mode === 'create' ? 'Creating new order' : 'Updating order'}</span>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                disabled={isLoading}
+                className="px-6 py-2"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isLoading || isSubmitting}
+                className="flex items-center gap-2 px-6 py-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    {mode === 'create' ? 'Creating...' : 'Updating...'}
+                  </>
+                ) : (
+                  <>
+                    <Package className="h-4 w-4" />
+                    {mode === 'create' ? 'Create Order' : 'Update Order'}
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </form>
+      </div>
     </div>
-  );
+  )
 }
+
+// Wrap the component with ErrorBoundary
+export default function OrderFormWithErrorBoundary(props: OrderFormProps) {
+  return (
+    <ErrorBoundary>
+      <OrderForm {...props} />
+    </ErrorBoundary>
+  )
+} 

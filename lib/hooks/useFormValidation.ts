@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 
 interface ValidationRule {
   required?: boolean
@@ -23,6 +23,12 @@ export function useFormValidation<T extends Record<string, any>>(
   const [data, setData] = useState<T>(initialData)
   const [errors, setErrors] = useState<ValidationErrors>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Update data when initialData changes
+  useEffect(() => {
+    console.log('🔄 useFormValidation: Updating data with new initialData:', initialData)
+    setData(initialData)
+  }, [initialData])
 
   const validateField = useCallback((name: string, value: any): string | null => {
     const rule = validationRules[name]

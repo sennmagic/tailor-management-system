@@ -251,7 +251,7 @@ export const OrderTable = React.memo(function OrderTable({
     
     const { error } = await fetchAPI({
       endpoint: `orders/${orderId}`,
-      method: 'PUT',
+      method: 'PATCH',
       data: { [field]: newStatus },
       withAuth: true,
     });

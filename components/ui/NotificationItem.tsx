@@ -77,7 +77,7 @@ const formatDate = (dateString: string) => {
   }
 };
 
-export function NotificationItem({ 
+const NotificationItem = React.memo(function NotificationItem({ 
   notification, 
   onMarkAsRead, 
   onDelete, 
@@ -160,4 +160,6 @@ export function NotificationItem({
       </div>
     </Card>
   );
-} 
+});
+
+export { NotificationItem } 

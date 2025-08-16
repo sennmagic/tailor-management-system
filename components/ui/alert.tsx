@@ -137,45 +137,45 @@ export const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
       switch (variant) {
         case "destructive":
           return {
-            container: "bg-gradient-to-r from-red-50/95 to-red-100/95 border-red-200/60 text-red-800 backdrop-blur-md shadow-xl shadow-red-500/15",
+            container: "bg-white border-red-200 text-red-800 shadow-lg",
             icon: "text-red-600",
-            progress: "bg-gradient-to-r from-red-500 to-red-600",
+            progress: "bg-red-500",
             title: "text-red-900",
             description: "text-red-700",
             action: "bg-red-600 hover:bg-red-700 text-white"
           };
         case "success":
           return {
-            container: "bg-gradient-to-r from-green-50/95 to-green-100/95 border-green-200/60 text-green-800 backdrop-blur-md shadow-xl shadow-green-500/15",
+            container: "bg-white border-green-200 text-green-800 shadow-lg",
             icon: "text-green-600",
-            progress: "bg-gradient-to-r from-green-500 to-green-600",
+            progress: "bg-green-500",
             title: "text-green-900",
             description: "text-green-700",
             action: "bg-green-600 hover:bg-green-700 text-white"
           };
         case "warning":
           return {
-            container: "bg-gradient-to-r from-yellow-50/95 to-yellow-100/95 border-yellow-200/60 text-yellow-800 backdrop-blur-md shadow-xl shadow-yellow-500/15",
+            container: "bg-white border-yellow-200 text-yellow-800 shadow-lg",
             icon: "text-yellow-600",
-            progress: "bg-gradient-to-r from-yellow-500 to-yellow-600",
+            progress: "bg-yellow-500",
             title: "text-yellow-900",
             description: "text-yellow-700",
             action: "bg-yellow-600 hover:bg-yellow-700 text-white"
           };
         case "info":
           return {
-            container: "bg-gradient-to-r from-blue-50/95 to-blue-100/95 border-blue-200/60 text-blue-800 backdrop-blur-md shadow-xl shadow-blue-500/15",
+            container: "bg-white border-blue-200 text-blue-800 shadow-lg",
             icon: "text-blue-600",
-            progress: "bg-gradient-to-r from-blue-500 to-blue-600",
+            progress: "bg-blue-500",
             title: "text-blue-900",
             description: "text-blue-700",
             action: "bg-blue-600 hover:bg-blue-700 text-white"
           };
         default:
           return {
-            container: "bg-gradient-to-r from-gray-50/95 to-gray-100/95 border-gray-200/60 text-gray-800 backdrop-blur-md shadow-xl shadow-gray-500/15",
+            container: "bg-white border-gray-200 text-gray-800 shadow-lg",
             icon: "text-gray-600",
-            progress: "bg-gradient-to-r from-gray-500 to-gray-600",
+            progress: "bg-gray-500",
             title: "text-gray-900",
             description: "text-gray-700",
             action: "bg-gray-600 hover:bg-gray-700 text-white"
@@ -194,10 +194,8 @@ export const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className={cn(
-          "relative w-full rounded-xl border px-4 py-4 text-sm transition-all duration-500 ease-out",
-          "transform animate-in slide-in-from-top-4 fade-in-0 zoom-in-95",
-          "hover:shadow-2xl hover:scale-[1.02] hover:border-opacity-80 hover:rotate-0.5",
-          "focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-current",
+          "relative w-full rounded-lg border px-4 py-3 text-sm transition-all duration-200",
+          "hover:shadow-md",
           getPriorityStyles(),
           styles.container,
           className
@@ -215,16 +213,10 @@ export const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
           </div>
         )}
 
-        {/* Animated background */}
-        <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300 rounded-xl" />
-
-        <div className="flex items-start gap-4 relative z-10">
-          {/* Icon with animation */}
-          <div className={cn("flex-shrink-0 mt-0.5 animate-pulse", styles.icon)}>
-            <div className="relative">
-              {getIcon()}
-              <div className="absolute inset-0 bg-current rounded-full opacity-20 animate-ping" />
-            </div>
+        <div className="flex items-start gap-4">
+          {/* Icon */}
+          <div className={cn("flex-shrink-0 mt-0.5", styles.icon)}>
+            {getIcon()}
           </div>
 
           {/* Content */}
@@ -298,11 +290,7 @@ export const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
           </div>
         </div>
 
-        {/* Floating particles effect */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-2 right-2 w-2 h-2 bg-current rounded-full opacity-30 animate-bounce" />
-          <div className="absolute bottom-2 left-2 w-1 h-1 bg-current rounded-full opacity-20 animate-pulse" />
-        </div>
+
       </div>
     );
   }
