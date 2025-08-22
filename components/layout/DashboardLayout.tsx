@@ -56,9 +56,41 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, [dropdownOpen]);
 
   const handleLogout = async () => {
-    await fetchAPI({ endpoint: 'employees/logout', method: 'POST', withAuth: true });
-    // Clear cookies if needed (optional)
-    router.push('/login');
+    try {
+      await fetchAPI({ endpoint: 'employees/logout', method: 'POST', withAuth: true });
+    } catch (error) {
+      console.error('Logout API error:', error);
+    }
+    
+    // Clear all possible auth tokens
+    const keysToRemove = [
+      'token', 
+      'authToken', 
+      'accessToken',
+      'user', 
+      'refreshToken',
+      'userInfo',
+      'session'
+    ];
+    
+    keysToRemove.forEach(key => {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    });
+    
+    // Clear cookies
+    document.cookie.split(";").forEach((cookie) => {
+      const eqPos = cookie.indexOf("=");
+      const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+      document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+      document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
+    });
+    
+    // Close dropdown
+    setDropdownOpen(false);
+    
+    // Force hard redirect
+    window.location.href = '/login';
   };
 
     useEffect(() => {
