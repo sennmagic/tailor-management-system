@@ -469,20 +469,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     )
   }
 
-<<<<<<< HEAD
-  function LinkSection({ title, children }: { title: string; children: ReactNode }) {
-    return (
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-4 px-1">
-          <div className="w-1 h-1 rounded-full bg-emerald-500"></div>
-          <p className="text-medium font-bold text-slate-500 uppercase tracking-wider">{title}</p>
-          <div className="flex-1 h-px bg-gradient-to-r from-slate-200 to-transparent"></div>
-        </div>
-        <div className="flex flex-col space-y-1">{children}</div>
-      </div>
-    )
-  }
-=======
      function LinkSection({ title, children }: { title: string; children: ReactNode }) {
      return (
        <div>
@@ -491,5 +477,4 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
        </div>
      )
    }
->>>>>>> origin/master
 }
