@@ -99,12 +99,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, [isMobileMenuOpen])
 
   const handleLogout = async () => {
-<<<<<<< HEAD
-    setIsNavigating(true)
-    await fetchAPI({ endpoint: 'employees/logout', method: 'POST', withAuth: true })
-    router.push('/login')
-  }
-=======
     try {
       await fetchAPI({ endpoint: 'employees/logout', method: 'POST', withAuth: true });
     } catch (error) {
@@ -141,7 +135,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     // Force hard redirect
     window.location.href = '/login';
   };
->>>>>>> origin/master
 
   useEffect(() => {
     const fetchSidebarData = async () => {
