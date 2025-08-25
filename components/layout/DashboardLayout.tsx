@@ -99,10 +99,49 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, [isMobileMenuOpen])
 
   const handleLogout = async () => {
+<<<<<<< HEAD
     setIsNavigating(true)
     await fetchAPI({ endpoint: 'employees/logout', method: 'POST', withAuth: true })
     router.push('/login')
   }
+=======
+    try {
+      await fetchAPI({ endpoint: 'employees/logout', method: 'POST', withAuth: true });
+    } catch (error) {
+      console.error('Logout API error:', error);
+    }
+    
+    // Clear all possible auth tokens
+    const keysToRemove = [
+      'token', 
+      'authToken', 
+      'accessToken',
+      'user', 
+      'refreshToken',
+      'userInfo',
+      'session'
+    ];
+    
+    keysToRemove.forEach(key => {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    });
+    
+    // Clear cookies
+    document.cookie.split(";").forEach((cookie) => {
+      const eqPos = cookie.indexOf("=");
+      const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+      document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+      document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
+    });
+    
+    // Close dropdown
+    setDropdownOpen(false);
+    
+    // Force hard redirect
+    window.location.href = '/login';
+  };
+>>>>>>> origin/master
 
   useEffect(() => {
     const fetchSidebarData = async () => {
@@ -437,6 +476,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     )
   }
 
+<<<<<<< HEAD
   function LinkSection({ title, children }: { title: string; children: ReactNode }) {
     return (
       <div className="mb-6">
@@ -449,4 +489,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </div>
     )
   }
+=======
+     function LinkSection({ title, children }: { title: string; children: ReactNode }) {
+     return (
+       <div>
+         <p className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">{title}</p>
+         <div className="flex flex-col space-y-2">{children}</div>
+       </div>
+     )
+   }
+>>>>>>> origin/master
 }

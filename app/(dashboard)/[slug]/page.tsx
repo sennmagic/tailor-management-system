@@ -1,33 +1,37 @@
 "use client";
-import { useEffect, useState, useMemo } from "react";
+import {  useState, useMemo } from "react";
 import { useParams } from "next/navigation";
-import { fetchAPI } from "@/lib/apiService";
+import { fetchAPI, useAPI, useAPIMutation } from "@/lib/apiService";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAlert } from "@/components/ui/alertProvider";
 import { MdVisibility, MdEdit, MdDelete, MdDownload } from "react-icons/md";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbSeparator, BreadcrumbPage } from "@/components/ui/breadcrumb";
 import { DynamicForm } from "@/components/Forms/DynamicFom";
-import { OrderForm } from "@/components/ui/orderForm";
+import OrderFormWithErrorBoundary from "@/components/ui/orderForm";
 import { OrderTable } from "@/components/ui/orderTable";
 import { useLookup } from "@/lib/hooks/useLookup";
 
 import Link from "next/link";
 
-// Date picker components
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
-function Modal({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
+
+function Modal({ open, onClose, children, isFullScreen = false }: { open: boolean; onClose: () => void; children: React.ReactNode; isFullScreen?: boolean }) {
   if (!open) return null;
+  
+  if (isFullScreen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/40">
+        {children}
+      </div>
+    );
+  }
+  
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className=" rounded shadow-lg max-w-lg w-full p-6 relative">
+      <div className="rounded shadow-lg max-w-lg w-full p-6 relative">
         <button onClick={onClose} className="absolute top-2 right-2 text-gray-500 hover:text-black text-xl">&times;</button>
         {children}
       </div>
@@ -36,7 +40,6 @@ function Modal({ open, onClose, children }: { open: boolean; onClose: () => void
 }
 
 
-const SKIP_FIELDS = ["updatedAt", "createdAt", "__v", "_id", "isDeleted"];
 
 function ViewDetailsModal({ 
   data, 
@@ -59,22 +62,7 @@ function ViewDetailsModal({
     isDateField 
   } = useLookup();
 
-  // Helper function to format values - REMOVED: using formatValue from useLookup hook instead
-  // function formatValue(value: unknown): string {
-  //   if (value == null || value === undefined) return "Not specified";
-  //   if (typeof value === "boolean") return value ? "Yes" : "No";
-  //   if (typeof value === "string" && value.trim() === "") return "Not specified";
-  //   if (typeof value === "object" && value !== null) {
-  //     if (Array.isArray(value)) {
-  //       return value.length === 0 ? "No items" : `${value.length} item(s)`;
-  //     }
-  //     if (Object.keys(value).length === 0) return "No data";
-  //     return "Object data";
-  //   }
-  //   return String(value);
-  // }
-
-  // Helper function to render nested object data in a user-friendly way
+ 
   function renderNestedData(data: any, title: string): React.ReactNode {
     if (!data || typeof data !== 'object') {
       return <div className="text-gray-500">No data available</div>;
@@ -386,68 +374,98 @@ export default function SlugPage() {
   const params = useParams();
   let slug = params.slug as string | undefined;
   if (Array.isArray(slug)) slug = slug[0];
-  const [apiResponse, setApiResponse] = useState<Array<Record<string, unknown>>>([]);
   const { showAlert } = useAlert();
   const [viewIdx, setViewIdx] = useState<number | null>(null);
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [deleteIdx, setDeleteIdx] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
   
   // Loading states for actions
   const [isAdding, setIsAdding] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState<number | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<number | null>(null);
-  const [isDownloading, setIsDownloading] = useState<number | null>(null);
   const [invoicePreview, setInvoicePreview] = useState<{ url: string; customerId: string; statusData?: any } | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  // Use the unified lookup hook
+  // React Query hooks
+  const { data: apiData, error, isLoading, refetch } = useAPI({
+    endpoint: slug || '',
+    method: 'GET',
+    enabled: !!slug,
+   
+  });
+
+  // Use the unified lookup hook first
   const {
     extractDataArray,
     isStatusField,
-    isDateField,
     getStatusOptions,
-    getStatusBadgeStyle,
-    formatFieldName,
     formatStatusValue,
-    formatValue,
-    shouldDisplayField,
     renderCellValue,
     filterSubmitFields,
-    getConsistentFormTemplate,
     getEmptyFormData
-  } = useLookup({ data: apiResponse });
-  
-  const [testFormOpen, setTestFormOpen] = useState(false);
-  const [testFormData] = useState({
-    name: "Test Item",
-    status: "pending",
-    customerId: "123",
-    amount: 100,
-    isActive: true,
-    createdAt: "2024-01-01",
-    description: "This is a test item",
-    tags: ["test", "demo"],
-    metadata: {
-      category: "test",
-      priority: "high"
-    }
+  } = useLookup({ data: [] }); // Initialize with empty array
+
+  // Extract data array from API response
+  const apiResponse = useMemo(() => {
+    if (!apiData) return [];
+    return extractDataArray(apiData);
+  }, [apiData, extractDataArray]);
+
+  // Mutation hooks for CRUD operations
+  const createMutation = useAPIMutation({
+    endpoint: slug || '',
+    method: 'POST',
+    onSuccess: () => {
+      showAlert("Created successfully!", "success");
+      refetch();
+    },
+    onError: (error) => {
+      showAlert(`Failed to create: ${error}`, "destructive");
+    },
   });
 
 
-  useEffect(() => {
-    if (!slug) return;
-    setLoading(true);
-    fetchAPI({ endpoint: slug, method: "GET" }).then(({ data, error }) => {
-     
-      const arr = extractDataArray(data);
-      setApiResponse(arr);
-      setError(error);
-      setLoading(false);
-    });
-  }, [slug]);
+
+  const patchMutation = useAPIMutation({
+    endpoint: slug || '',
+    method: 'PATCH',
+    onSuccess: () => {
+      showAlert("Update successful!", "success");
+      refetch();
+    },
+    onError: (error) => {
+      showAlert(`Failed to update: ${error}`, "destructive");
+    },
+  });
+
+  const deleteMutation = useAPIMutation({
+    endpoint: slug || '',
+    method: 'DELETE',
+    onSuccess: () => {
+      showAlert("Deleted successfully!", "success");
+      refetch();
+    },
+    onError: (error) => {
+      showAlert(`Failed to delete: ${error}`, "destructive");
+    },
+  });
+
+  const statusUpdateMutation = useAPIMutation({
+    endpoint: slug || '',
+    method: 'PUT',
+    onSuccess: () => {
+      showAlert("Status updated successfully!", "success");
+      refetch();
+    },
+    onError: (error) => {
+      showAlert(`Failed to update status: ${error}`, "destructive");
+    },
+  });
+  
+  const [testFormOpen, setTestFormOpen] = useState(false);
+ 
+
+
 
   // Use apiResponse directly since we removed status filtering
   const filteredOrders = useMemo(() => {
@@ -505,235 +523,130 @@ export default function SlugPage() {
     return <span className="text-gray-400">-</span>;
   }
 
-  // Unified API handler for all CRUD operations
-  async function handleApiOperation(
-    operation: 'create' | 'update' | 'delete' | 'status-update' | 'field-update' | 'preview-invoice' | 'download-receipt' | 'preview-status-update',
-    data?: Record<string, unknown>,
-    options?: {
-      idx?: number;
-      fieldName?: string;
-      newValue?: string;
-      customerId?: string;
-      statusKey?: string;
-    }
-  ) {
-    const endpointSlug = typeof slug === 'string' ? slug : '';
+  // React Query based API operations
+  const handleCreate = async (data: Record<string, unknown>) => {
+    const filteredData = filterSubmitFields(data);
+    await createMutation.mutateAsync(filteredData);
+    setAddOpen(false);
+  };
+
+  const handleUpdate = async (data: Record<string, unknown>, idx: number) => {
+    const itemToEdit = apiResponse[idx];
+    const editId = itemToEdit?._id as string;
+    const filteredData = filterSubmitFields(data);
     
-    try {
-      let response;
-      let endpoint = '';
-      let method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET';
-      let requestData: Record<string, unknown> | undefined;
-
-      switch (operation) {
-        case 'create':
-          method = 'POST';
-          endpoint = endpointSlug;
-          requestData = filterSubmitFields(data!);
-          setIsAdding(true);
-          break;
-
-        case 'update':
-          method = 'PUT';
-          const itemToEdit = apiResponse[options?.idx!];
-          const editId = itemToEdit?._id as string;
-          endpoint = `${endpointSlug}/${editId}`;
-          requestData = filterSubmitFields(data!);
-          setIsEditing(true);
-          break;
-
-        case 'delete':
-          method = 'DELETE';
-          const itemToDelete = apiResponse[options?.idx!];
-          const deleteId = itemToDelete?._id as string;
-          endpoint = `${endpointSlug}/${deleteId}`;
-          setIsDeleting(options?.idx!);
-          break;
-
-        case 'status-update':
-          method = 'PUT';
-          const itemToUpdate = apiResponse[options?.idx!];
-          const statusId = itemToUpdate?._id as string;
-          endpoint = `${endpointSlug}/${statusId}`;
-          requestData = { status: options?.newValue };
-          setIsUpdatingStatus(options?.idx!);
-          break;
-
-        case 'field-update':
-          method = 'PUT';
-          const fieldItem = apiResponse[options?.idx!];
-          const fieldId = fieldItem?._id as string;
-          endpoint = `${endpointSlug}/${fieldId}`;
-          requestData = { [options?.fieldName!]: options?.newValue };
-          setIsUpdatingStatus(options?.idx!);
-          break;
-
-        case 'preview-invoice':
-          method = 'GET';
-          endpoint = `invoice/${options?.customerId}`;
-          setIsDownloading(options?.idx!);
-          break;
-
-        case 'download-receipt':
-          method = 'GET';
-          endpoint = `invoice/${options?.customerId}/download`;
-          break;
-
-        case 'preview-status-update':
-          method = 'PUT';
-          endpoint = `orders/${options?.customerId}`;
-          requestData = { [options?.statusKey!]: options?.newValue };
-          break;
-      }
-
-      const { data: responseData, error } = await fetchAPI({
-        endpoint,
-        method,
-        data: requestData,
-        withAuth: true,
-      });
-
-      if (error) {
-        const errorMessages = {
-          'create': 'Failed to create',
-          'update': 'Failed to update',
-          'delete': 'Failed to delete',
-          'status-update': 'Failed to update status',
-          'field-update': `Failed to update ${options?.fieldName || 'field'}`,
-          'preview-invoice': 'Failed to load invoice preview',
-          'download-receipt': 'Failed to download receipt',
-          'preview-status-update': 'Failed to update status'
-        };
-        showAlert(`${errorMessages[operation]}: ${error}`, "destructive");
-        return { success: false, data: null, error };
-      }
-
-      // Handle successful responses
-      switch (operation) {
-        case 'create':
-          // Refresh data after creation
-          const { data: refreshData } = await fetchAPI({ endpoint: endpointSlug, method: "GET" });
-          setApiResponse(extractDataArray(refreshData));
-          setAddOpen(false);
-          showAlert("Created successfully!", "success");
-          break;
-
-        case 'update':
-          // Refresh data after update
-          const { data: updateRefreshData } = await fetchAPI({ endpoint: endpointSlug, method: "GET" });
-          setApiResponse(extractDataArray(updateRefreshData));
-          setEditIdx(null);
-          showAlert("Update successful!", "success");
-          break;
-
-        case 'delete':
-          // Update local state after successful deletion
-          setApiResponse((prev) => prev.filter((_, i) => i !== options?.idx!));
-          setDeleteIdx(null);
-          showAlert("Deleted successfully!", "success");
-          break;
-
-        case 'status-update':
-        case 'field-update':
-          // Update local state
-          setApiResponse((prev) => 
-            prev.map((item, i) => 
-              i === options?.idx! 
-                ? { ...item, [options?.fieldName || 'status']: options?.newValue }
-                : item
-            )
-          );
-          showAlert(operation === 'status-update' 
-            ? "Status updated successfully!" 
-            : `${options?.fieldName?.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()) || 'Field'} updated successfully!`, 
-            "success"
-          );
-          break;
-
-        case 'preview-invoice':
-          if (responseData && responseData.previewUrl) {
-            // Find status fields in the order data
-            const statusFields: Record<string, any> = {};
-            const itemToDownload = apiResponse[options?.idx!];
-            Object.entries(itemToDownload || {}).forEach(([key, value]) => {
-              if (key.toLowerCase().includes('status')) {
-                statusFields[key] = value;
-              }
-            });
-            
-            setInvoicePreview({ 
-              url: responseData.previewUrl, 
-              customerId: options?.customerId!,
-              statusData: statusFields
-            });
-          } else {
-            showAlert("No preview URL received from server", "destructive");
-          }
-          break;
-
-        case 'download-receipt':
-          if (responseData && responseData.downloadUrl) {
-            // Create a temporary link to download the file
-            const link = document.createElement('a');
-            link.href = responseData.downloadUrl;
-            link.download = `receipt-${options?.customerId}.pdf`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            showAlert("Receipt downloaded successfully!", "success");
-            setInvoicePreview(null);
-          } else {
-            showAlert("No download URL received from server", "destructive");
-          }
-          break;
-
-        case 'preview-status-update':
-          // Update local state
-          setApiResponse((prev) => 
-            prev.map((item) => 
-              item.customerId === options?.customerId 
-                ? { ...item, [options?.statusKey!]: options?.newValue }
-                : item
-            )
-          );
-          
-          // Update preview state
-          setInvoicePreview(prev => prev ? {
-            ...prev,
-            statusData: {
-              ...prev.statusData,
-              [options?.statusKey!]: options?.newValue
-            }
-          } : null);
-          
-          showAlert("Status updated successfully!", "success");
-          break;
-      }
-
-      return { success: true, data: responseData, error: null };
-
-    } catch (err) {
-      const errorMessages = {
-        'create': 'Failed to create',
-        'update': 'Failed to update',
-        'delete': 'Failed to delete',
-        'status-update': 'Failed to update status',
-        'field-update': `Failed to update ${options?.fieldName || 'field'}`,
-        'preview-invoice': 'Failed to load invoice preview',
-        'download-receipt': 'Failed to download receipt',
-        'preview-status-update': 'Failed to update status'
-      };
-      showAlert(`${errorMessages[operation]}: ${err}`, "destructive");
-      return { success: false, data: null, error: err };
-    } finally {
-      // Reset loading states
-      setIsAdding(false);
-      setIsEditing(false);
-      setIsDeleting(null);
-      setIsUpdatingStatus(null);
-      setIsDownloading(null);
+    if (!editId) {
+      showAlert("Item ID not found for update", "destructive");
+      return;
     }
-  }
+    
+    console.log('🔄 Updating item:', { editId, filteredData, slug });
+    
+    // Use fetchAPI directly to include ID in URL
+    const result = await fetchAPI({
+      endpoint: slug || '',
+      method: 'PUT',
+      id: editId,
+      data: filteredData,
+      withAuth: true
+    });
+    
+    if (result.error) {
+      showAlert(`Failed to update: ${result.error}`, "destructive");
+    } else {
+      showAlert("Update successful!", "success");
+      refetch();
+      setEditIdx(null);
+    }
+  };
+
+  const handleDelete = async (idx: number) => {
+    const itemToDelete = apiResponse[idx];
+    const deleteId = itemToDelete?._id as string;
+    
+    if (!deleteId) {
+      showAlert("Item ID not found for deletion", "destructive");
+      return;
+    }
+    
+    
+    // Use fetchAPI directly to include ID in URL
+    const result = await fetchAPI({
+      endpoint: slug || '',
+      method: 'DELETE',
+      id: deleteId,
+      withAuth: true
+    });
+    
+    if (result.error) {
+      showAlert(`Failed to delete: ${result.error}`, "destructive");
+    } else {
+      showAlert("Deleted successfully!", "success");
+      refetch();
+      setDeleteIdx(null);
+    }
+  };
+
+  const handleStatusUpdate = async (idx: number, fieldName: string, newValue: string) => {
+    const itemToUpdate = apiResponse[idx];
+    const statusId = itemToUpdate?._id as string;
+    
+    if (!statusId) {
+      showAlert("Item ID not found for status update", "destructive");
+      return;
+    }
+    
+    
+    // Use PATCH for orders, PUT for other entities
+    const method = slug === 'orders' ? 'PATCH' : 'PUT';
+    
+    // Use fetchAPI directly to include ID in URL
+    const result = await fetchAPI({
+      endpoint: slug || '',
+      method: method,
+      id: statusId,
+      data: { [fieldName]: newValue },
+      withAuth: true
+    });
+    
+    if (result.error) {
+      showAlert(`Failed to update status: ${result.error}`, "destructive");
+    } else {
+      showAlert("Status updated successfully!", "success");
+      refetch();
+    }
+  };
+
+  const handleFieldUpdate = async (idx: number, fieldName: string, newValue: string) => {
+    const itemToUpdate = apiResponse[idx];
+    const fieldId = itemToUpdate?._id as string;
+    
+    if (!fieldId) {
+      showAlert("Item ID not found for field update", "destructive");
+      return;
+    }
+    
+    console.log('🔄 Updating field:', { fieldId, fieldName, newValue, slug });
+    
+    // Use PATCH for orders, PUT for other entities
+    const method = slug === 'orders' ? 'PATCH' : 'PUT';
+    
+    // Use fetchAPI directly to include ID in URL
+    const result = await fetchAPI({
+      endpoint: slug || '',
+      method: method,
+      id: fieldId,
+      data: { [fieldName]: newValue },
+      withAuth: true
+    });
+    
+    if (result.error) {
+      showAlert(`Failed to update field: ${result.error}`, "destructive");
+    } else {
+      showAlert("Field updated successfully!", "success");
+      refetch();
+    }
+  };
 
   return (
     <div>
@@ -762,16 +675,7 @@ export default function SlugPage() {
           {slug === 'orders' ? 'Orders Management' : (slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : 'Item')}
         </h1>
         <div className="flex gap-2">
-          <Button
-            onClick={() => {
-              // Test DynamicFormWithHook
-              setTestFormOpen(true);
-            }}
-            variant="outline"
-            size="sm"
-          >
-            Test Form
-          </Button>
+      
           <Button
             onClick={() => setAddOpen(true)}
             disabled={isAdding}
@@ -790,10 +694,10 @@ export default function SlugPage() {
       
       {/* Show OrderForm when addOpen is true for orders */}
       {slug === 'orders' && addOpen && (
-        <OrderForm 
-          slug={slug} 
-          onClose={() => setAddOpen(false)}
-          isEdit={false}
+        <OrderFormWithErrorBoundary 
+          onSuccess={() => setAddOpen(false)}
+          onCancel={() => setAddOpen(false)}
+          mode="create"
         />
       )}
       
@@ -806,7 +710,7 @@ export default function SlugPage() {
           {slug === 'orders' ? (
             <OrderTable
               orders={apiResponse as any[]}
-              loading={loading}
+              loading={isLoading}
               onEdit={(order) => {
                 // Convert order to the format expected by the existing edit functionality
                 const orderIndex = apiResponse.findIndex(item => item._id === order._id);
@@ -823,31 +727,35 @@ export default function SlugPage() {
               onDelete={(orderId) => {
                 const orderIndex = apiResponse.findIndex(item => item._id === orderId);
                 if (orderIndex !== -1) {
-                  handleApiOperation('delete', {}, { idx: orderIndex });
+                  handleDelete(orderIndex);
                 }
               }}
               onStatusChange={(orderId, status, field) => {
                 const orderIndex = apiResponse.findIndex(item => item._id === orderId);
                 if (orderIndex !== -1) {
-                  handleApiOperation('field-update', {}, { idx: orderIndex, fieldName: field, newValue: status });
+                  handleFieldUpdate(orderIndex, field, status);
                 }
               }}
             />
           ) : (
         <div className="overflow-x-auto bg-white rounded shadow">
-          {loading ? (
+          {isLoading ? (
             <div className="p-6">
-              <Skeleton className="h-8 w-full mb-2" />
-              <Skeleton className="h-8 w-full mb-2" />
-              <Skeleton className="h-8 w-full mb-2" />
+              <div className="space-y-3">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
             </div>
           ) : error ? (
             <div className="p-6 text-center text-red-500">{error}</div>
           ) : filteredOrders.length === 0 ? (
-            <div className="p-6 text-center text-gray-500">
-              No data found.
-            </div>
-          ) : (
+             <div className="p-6 text-center text-gray-500">
+               No data found.
+             </div>
+           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -890,7 +798,7 @@ export default function SlugPage() {
                               </div>
                               <select
                                 value={String(row[key] || '')}
-                                                                 onChange={(e) => handleApiOperation('field-update', {}, { idx, fieldName: key, newValue: e.target.value })}
+                                onChange={(e) => handleFieldUpdate(idx, key, e.target.value)}
                                 disabled={isUpdatingStatus === idx}
                                 className="text-xs px-2 py-1 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 min-w-24"
                                 title={`Change ${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`}
@@ -924,9 +832,9 @@ export default function SlugPage() {
                             onClick={() => setEditIdx(idx)}
                             title="Edit"
                             size="icon"
-                            disabled={isEditing}
+                            disabled={patchMutation.isLoading}
                           >
-                            {isEditing && editIdx === idx ? (
+                                                          {patchMutation.isLoading && editIdx === idx ? (
                               <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                             ) : (
                               <MdEdit className="w-4 h-4" />
@@ -942,7 +850,7 @@ export default function SlugPage() {
                                   const options = getStatusOptions(statusField);
                                   const currentIndex = options.indexOf(currentStatus);
                                   const nextStatus = options[(currentIndex + 1) % options.length];
-                                                                     handleApiOperation('field-update', {}, { idx, fieldName: statusField, newValue: nextStatus });
+                                  handleFieldUpdate(idx, statusField, nextStatus);
                                 }
                               }}
                               title="Quick Status Change"
@@ -990,27 +898,24 @@ export default function SlugPage() {
       />
       {/* Edit Modal - Use OrderForm for orders, DynamicForm for others */}
       {slug === 'orders' ? (
-        <Modal open={editIdx !== null} onClose={() => setEditIdx(null)}>
-          <h2 className="text-lg font-semibold mb-2">Edit Order</h2>
-          {editIdx !== null && (
-            <OrderForm
-              slug={slug}
-              onClose={() => setEditIdx(null)}
-              isEdit={true}
-              editData={apiResponse[editIdx]}
-            />
-          )}
-        </Modal>
+        editIdx !== null && (
+                          <OrderFormWithErrorBoundary
+                  initialData={apiResponse[editIdx]}
+                  onSuccess={() => setEditIdx(null)}
+                  onCancel={() => setEditIdx(null)}
+                  mode="edit"
+                />
+        )
       ) : (
-        <Modal open={editIdx !== null} onClose={() => setEditIdx(null)}>
-          <h2 className="text-lg font-semibold mb-2">Edit Row</h2>
+        <Modal open={editIdx !== null} onClose={() => setEditIdx(null)} isFullScreen={true}>
           {editIdx !== null && (
             <DynamicForm
               data={apiResponse[editIdx]}
-                             onSubmit={(values) => handleApiOperation('update', values, { idx: editIdx! })}
+              onSubmit={async (values) => {
+                await handleUpdate(values, editIdx!);
+              }}
               onCancel={() => setEditIdx(null)}
-              getConsistentFormTemplate={() => getConsistentFormTemplate(apiResponse)}
-              isLoading={isEditing}
+              isLoading={patchMutation.isLoading}
             />
           )}
         </Modal>
@@ -1019,10 +924,10 @@ export default function SlugPage() {
         <h2 className="text-lg font-semibold mb-2">Are you sure you want to delete?</h2>
         <div className="flex gap-2 mt-4">
                   <Button 
-                         onClick={() => handleApiOperation('delete', undefined, { idx: deleteIdx as number })} 
-          variant="destructive"
-          disabled={isDeleting === deleteIdx}
-        >
+                    onClick={() => handleDelete(deleteIdx as number)} 
+                    variant="destructive"
+                    disabled={isDeleting === deleteIdx}
+                  >
           {isDeleting === deleteIdx ? (
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -1043,120 +948,19 @@ export default function SlugPage() {
       </Modal>
       {/* Only show dynamic form modal for non-orders pages */}
       {slug !== 'orders' && (
-        <Modal open={addOpen} onClose={() => setAddOpen(false)}>
-          <h2 className="text-lg font-semibold mb-2">Add New {slug ?? 'Item'}</h2>
+        <Modal open={addOpen} onClose={() => setAddOpen(false)} isFullScreen={true}>
           <DynamicForm
             data={getEmptyFormData(apiResponse, allKeys)}
-                         onSubmit={(values) => handleApiOperation('create', values)}
+            onSubmit={async (values) => {
+              await handleCreate(values);
+            }}
             onCancel={() => setAddOpen(false)}
-            getConsistentFormTemplate={() => getConsistentFormTemplate(apiResponse)}
             isLoading={isAdding}
           />
         </Modal>
       )}
-      <Modal open={invoicePreview !== null} onClose={() => setInvoicePreview(null)}>
-        <div className="w-full max-w-4xl">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Invoice Preview</h2>
-            <button 
-              onClick={() => setInvoicePreview(null)}
-              className="text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          {invoicePreview && (
-            <>
-              {/* Status Section */}
-              {invoicePreview.statusData && Object.keys(invoicePreview.statusData).length > 0 && (
-                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                  <h3 className="text-md font-semibold mb-3 text-gray-800">Order Status</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {Object.entries(invoicePreview.statusData).map(([statusKey, statusValue]) => (
-                      <div key={statusKey} className="flex items-center gap-3">
-                        <label className="text-sm font-medium text-gray-700 min-w-24">
-                          {statusKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:
-                        </label>
-                        <select
-                          value={String(statusValue || '')}
-                                                     onChange={(e) => handleApiOperation('preview-status-update', undefined, { customerId: invoicePreview.customerId, statusKey, newValue: e.target.value })}
-                          className="flex-1 text-sm px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        >
-                          <option value="">Select Status</option>
-                          <option value="pending">Pending</option>
-                          <option value="in-progress">In Progress</option>
-                          <option value="Paid">Paid</option>
-                          <option value="cancelled">Cancelled</option>
-                          <option value="active">Active</option>
-                          <option value="inactive">Inactive</option>
-                          <option value="approved">Approved</option>
-                          <option value="rejected">Rejected</option>
-                          <option value="processing">Processing</option>
-                          <option value="shipped">Shipped</option>
-                          <option value="delivered">Delivered</option>
-                          <option value="returned">Returned</option>
-                        </select>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              {/* Invoice Preview */}
-              <div className="mb-4">
-                <iframe
-                  src={invoicePreview.url}
-                  className="w-full h-96 border border-gray-300 rounded-lg"
-                  title="Invoice Preview"
-                />
-              </div>
-              
-              {/* Action Buttons */}
-              <div className="flex justify-end gap-2">
-                <Button
-                                     onClick={() => handleApiOperation('download-receipt', undefined, { customerId: invoicePreview.customerId })}
-                >
-                  Download Receipt
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setInvoicePreview(null)}
-                >
-                  Close
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-      </Modal>
-      <Modal open={testFormOpen} onClose={() => setTestFormOpen(false)}>
-        <h2 className="text-lg font-semibold mb-2">Test DynamicForm</h2>
-        <DynamicForm
-          data={testFormData}
-          onSubmit={(values) => {
-            console.log("Submitted test form values:", values);
-            setTestFormOpen(false);
-          }}
-          onCancel={() => setTestFormOpen(false)}
-          getConsistentFormTemplate={() => ({
-            name: "Test Item",
-            status: "pending",
-            customerId: "123",
-            amount: 100,
-            isActive: true,
-            createdAt: "2024-01-01",
-            description: "This is a test item",
-            tags: ["test", "demo"],
-            metadata: {
-              category: "test",
-              priority: "high"
-            }
-          })}
-          isLoading={false}
-        />
-      </Modal>
+  
+  
     </div>
   );
 }

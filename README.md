@@ -56,6 +56,37 @@ The form will automatically:
 - **Error Resilient**: Handles API failures gracefully
 - **Loading States**: Shows loading indicators while fetching options
 
+### PATCH Support for Editing
+
+The dynamic form now supports PATCH operations for editing existing records:
+
+#### How PATCH Works
+
+1. **Automatic Detection**: The form automatically detects if it's editing an existing record by checking for `_id` in the data
+2. **PATCH vs PUT**: When editing, the system uses PATCH method to only update changed fields instead of replacing the entire record
+3. **Efficient Updates**: Only modified fields are sent to the server, reducing bandwidth and improving performance
+4. **Smart Field Filtering**: The form filters out unnecessary fields before submission using the `filterSubmitFields` function
+
+#### Example Usage
+
+```typescript
+// Creating a new record (uses POST)
+const newData = { name: "John Doe", email: "john@example.com" };
+await createMutation.mutateAsync(newData);
+
+// Editing an existing record (uses PATCH)
+const editData = { _id: "user_123", name: "John Smith" };
+await patchMutation.mutateAsync(editData);
+```
+
+#### Benefits
+
+- **Efficient Updates**: Only changed fields are sent to the server
+- **Reduced Bandwidth**: Smaller payloads for better performance
+- **Better UX**: Faster response times for edit operations
+- **Automatic Detection**: No manual configuration needed
+- **Consistent API**: Uses the same form component for both create and edit
+
 ## Getting Started
 
 1. Install dependencies:
