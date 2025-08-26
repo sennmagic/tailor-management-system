@@ -740,6 +740,7 @@ export function DynamicForm({
        <form
          onSubmit={handleSubmit}
          className="w-full h-full bg-white p-0 m-0 flex flex-col overflow-auto"
+         
        >
         <div className="mb-6 px-6 pt-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
