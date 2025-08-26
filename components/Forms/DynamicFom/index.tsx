@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { useLookup } from "@/lib/hooks/useLookup";
 
 export function DynamicForm({ 
@@ -17,6 +18,7 @@ export function DynamicForm({
   }) {
     const [formState, setFormState] = useState<Record<string, unknown>>(data || {});
     const [initialData, setInitialData] = useState<Record<string, unknown>>(data || {});
+    const [currentStep, setCurrentStep] = useState(0);
     
     // Use the lookup hook instead of duplicating functions
     const {
@@ -24,35 +26,27 @@ export function DynamicForm({
       lookupErrors,
       detectFieldType,
       formatFieldName,
-      
       shouldDisplayField,
-      
       fetchLookupOptions,
       resetLookups,
       filterSubmitFields,
       getEmptyFormData,
     } = useLookup({ data });
 
-    
     // Update form state when data changes, but preserve user input
     useEffect(() => {
       if (data) {
-        // Check if this is a completely new form (different initial data)
         const isNewForm = JSON.stringify(initialData) !== JSON.stringify(data);
         
         if (isNewForm) {
-          // This is a new form, reset everything
           setInitialData(data);
           setFormState(data);
+          setCurrentStep(0); // Reset to first step for new form
         } else {
-          // Same form, preserve user input
           setFormState(prev => {
-            // If form is empty, initialize with data
             if (!prev || Object.keys(prev).length === 0) {
               return data;
             }
-            
-            // Preserve existing form state
             return prev;
           });
         }
@@ -69,7 +63,6 @@ export function DynamicForm({
         for (let i = 0; i < pathParts.length - 1; i++) {
           const part = pathParts[i];
           
-          // Handle array indices like specialDates[0]
           const arrayMatch = part.match(/^(\w+)\[(\d+)\]$/);
           if (arrayMatch) {
             const arrayName = arrayMatch[1];
@@ -82,7 +75,6 @@ export function DynamicForm({
               current[arrayName] = [];
             }
             
-            // Ensure array has enough elements
             while (current[arrayName].length <= arrayIndex) {
               current[arrayName].push({});
             }
@@ -109,7 +101,6 @@ export function DynamicForm({
             current[arrayName] = [];
           }
           
-          // Ensure array has enough elements
           while (current[arrayName].length <= arrayIndex) {
             current[arrayName].push({});
           }
@@ -130,7 +121,6 @@ export function DynamicForm({
       
       for (const part of pathParts) {
         if (current && typeof current === 'object') {
-          // Handle array indices like specialDates[0]
           const arrayMatch = part.match(/^(\w+)\[(\d+)\]$/);
           if (arrayMatch) {
             const arrayName = arrayMatch[1];
@@ -159,12 +149,95 @@ export function DynamicForm({
       return current;
     }
 
-    // Render field based on its type and structure
-    function renderField(key: string, value: unknown, fieldPath: string, level = 0): React.ReactNode {
+    // Group fields by type for better organization
+    function organizeFields(obj: Record<string, unknown>, parentPath = ''): {
+      basic: Array<[string, unknown, string]>;
+      lookup: Array<[string, unknown, string]>;
+      status: Array<[string, unknown, string]>;
+      complex: Array<[string, unknown, string]>;
+    } {
+      const groups: {
+        basic: Array<[string, unknown, string]>;
+        lookup: Array<[string, unknown, string]>;
+        status: Array<[string, unknown, string]>;
+        complex: Array<[string, unknown, string]>;
+      } = { 
+        basic: [] as Array<[string, unknown, string]>, 
+        lookup: [] as Array<[string, unknown, string]>, 
+        status: [] as Array<[string, unknown, string]>, 
+        complex: [] as Array<[string, unknown, string]> 
+      };
+      
+      Object.entries(obj).forEach(([key, value]) => {
+        if (!shouldDisplayField(key, value)) {
+          return;
+        }
+        
+        const fieldPath = parentPath ? `${parentPath}.${key}` : key;
+        const fieldType = detectFieldType(key, value, parentPath);
+        
+        if (fieldType.type === 'lookup') {
+          groups.lookup.push([key, value, fieldPath]);
+        } else if (fieldType.type === 'status') {
+          groups.status.push([key, value, fieldPath]);
+        } else if (fieldType.type === 'array' || fieldType.type === 'object') {
+          groups.complex.push([key, value, fieldPath]);
+        } else {
+          groups.basic.push([key, value, fieldPath]);
+        }
+      });
+      
+      return groups;
+    }
+
+    // Organize fields into steps with type-based organization
+    function organizeFieldsIntoSteps(): Array<{
+      title: string;
+      fields: Array<[string, unknown, string]>;
+      stepType: 'basic' | 'complex';
+    }> {
+      const steps: Array<{
+        title: string;
+        fields: Array<[string, unknown, string]>;
+        stepType: 'basic' | 'complex';
+      }> = [];
+      
+      const fieldGroups = organizeFields(formState);
+      
+      // Step 1: Basic Information (combines basic, lookup, and status fields)
+      const basicStepFields = [
+        ...fieldGroups.basic,
+        ...fieldGroups.lookup,
+        ...fieldGroups.status
+      ];
+      
+      if (basicStepFields.length > 0) {
+        steps.push({
+          title: 'Basic Information',
+          fields: basicStepFields,
+          stepType: 'basic'
+        });
+      }
+      
+      // Additional steps: Each complex field gets its own step
+      fieldGroups.complex.forEach(([key, value, fieldPath]) => {
+        steps.push({
+          title: formatFieldName(key),
+          fields: [[key, value, fieldPath]],
+          stepType: 'complex'
+        });
+      });
+      
+      return steps;
+    }
+
+    const steps = organizeFieldsIntoSteps();
+
+    // Render field based on its type
+    function renderField(key: string, value: unknown, fieldPath: string): React.ReactNode {
       const fieldType = detectFieldType(key, value, fieldPath.split('.').slice(0, -1).join('.'));
       const currentValue = getFieldValue(fieldPath);
       
-      // Skip fields that shouldn't be displayed (including "is" fields)
       if (!shouldDisplayField(key, value)) {
         return null;
       }
@@ -177,19 +250,15 @@ export function DynamicForm({
       switch (fieldType.type) {
         case 'lookup':
           const options = lookupOptions[fieldPath] || [];
-          const isLoading = !options.length && !lookupErrors[fieldPath];
+          const isLoadingLookup = !options.length && !lookupErrors[fieldPath];
           const hasError = lookupErrors[fieldPath];
           
-          // Handle different types of lookups
           let selectValue = '';
           if (fieldType.config?.isArrayItemLookup) {
-            // For array item lookups (like label in specialDates), use the string value directly
             selectValue = currentValue || '';
           } else if (currentValue && typeof currentValue === 'object' && currentValue !== null) {
-            // For object lookups, extract the ID from the object
             selectValue = (currentValue as any)._id || (currentValue as any).id || '';
           } else {
-            // For regular ID-based lookups
             selectValue = currentValue || '';
           }
           
@@ -197,35 +266,31 @@ export function DynamicForm({
             <div key={fieldPath} className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
                 {formatFieldName(key)}
-                <span className="text-xs text-primary ml-2">🔗 Lookup Field</span>
+                <span className="text-xs text-blue-600 ml-2">Lookup Field</span>
               </label>
               <select
                 value={selectValue}
                 onChange={(e) => {
                   const selectedId = e.target.value;
                   if (fieldType.config?.isArrayItemLookup) {
-                    // For array item lookups, store the label string directly
                     const selectedOption = options.find(opt => opt.id === selectedId);
                     handleFieldChange(fieldPath, selectedOption ? selectedOption.label : '');
                   } else if (fieldType.config?.isObjectLookup) {
-                    // For object lookups, find the selected option and store the full object
                     const selectedOption = options.find(opt => opt.id === selectedId);
                     if (selectedOption) {
-                      // Store the full object data instead of just the ID
                       handleFieldChange(fieldPath, { _id: selectedId, name: selectedOption.label });
                     } else {
                       handleFieldChange(fieldPath, null);
                     }
                   } else {
-                    // For regular ID-based lookups, store just the ID
                     handleFieldChange(fieldPath, selectedId);
                   }
                 }}
-                className={`${commonInputProps.className} ${lookupErrors[fieldPath] ? 'border-red-500' : ''}`}
-                disabled={isLoading}
+                className={`${commonInputProps.className} ${hasError ? 'border-red-500' : ''}`}
+                disabled={isLoadingLookup}
               >
                 <option value="">
-                  {isLoading ? 'Loading options...' : `Select ${formatFieldName(key)}`}
+                  {isLoadingLookup ? 'Loading options...' : `Select ${formatFieldName(key)}`}
                 </option>
                 {options.map((option) => (
                   <option key={option.id} value={option.id}>
@@ -235,13 +300,11 @@ export function DynamicForm({
               </select>
               {hasError && (
                 <div className="text-red-600 text-sm flex items-center gap-2">
-                  <span>❌</span>
+                  <span>Error</span>
                   <span>{hasError}</span>
                   <button 
                     onClick={() => {
-                      // Clear error and retry
                       resetLookups();
-                      // Re-trigger lookup fetch
                       if (fieldType.config) {
                         fetchLookupOptions(fieldPath, fieldType.config);
                       }
@@ -252,9 +315,9 @@ export function DynamicForm({
                   </button>
                 </div>
               )}
-              {isLoading && (
+              {isLoadingLookup && (
                 <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                   Loading {fieldType.config?.entityName || 'options'}...
                 </div>
               )}
@@ -266,7 +329,7 @@ export function DynamicForm({
             <div key={fieldPath} className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
                 {formatFieldName(key)}
-                <span className="text-xs text-secondary ml-2">📊 Status Field</span>
+                <span className="text-xs text-secondary ml-2">Status Field</span>
               </label>
               <select
                 value={currentValue || ''}
@@ -288,7 +351,7 @@ export function DynamicForm({
             <div key={fieldPath} className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
                 {formatFieldName(key)}
-                <span className="text-xs text-secondary ml-2">📅 Date Field</span>
+                <span className="text-xs text-secondary ml-2">Date Field</span>
               </label>
               <Input
                 type="date"
@@ -309,7 +372,7 @@ export function DynamicForm({
                 />
                 <span className="text-sm font-medium text-gray-700">
                   {formatFieldName(key)}
-                  <span className="text-xs text-secondary ml-2">☑️ Boolean Field</span>
+                  <span className="text-xs text-secondary ml-2">Boolean Field</span>
                 </span>
               </label>
             </div>
@@ -320,30 +383,23 @@ export function DynamicForm({
             <div key={fieldPath} className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
                 {formatFieldName(key)}
-                <span className="text-xs text-secondary ml-2">🔢 Number Field</span>
+                <span className="text-xs text-secondary ml-2">Number Field</span>
               </label>
-          <Input
-  type="number"
-
-  value={currentValue ?? ''}
-  onChange={(e) => {
-    const val = e.target.value;
-
-    // Allow empty string so user can type
-    if (val === '') {
-      handleFieldChange(fieldPath, undefined);
-      return;
-    }
-
-    // Allow typing 0 and decimals
-    // Only convert to number if it is a valid numbera
-    if (!isNaN(Number(val))) {
-      handleFieldChange(fieldPath, val);
-    }
-  }}
-  placeholder={commonInputProps.placeholder}
-/>
-
+              <Input
+                type="number"
+                value={currentValue ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '') {
+                    handleFieldChange(fieldPath, undefined);
+                    return;
+                  }
+                  if (!isNaN(Number(val))) {
+                    handleFieldChange(fieldPath, val);
+                  }
+                }}
+                placeholder={commonInputProps.placeholder}
+              />
             </div>
           );
 
@@ -351,7 +407,7 @@ export function DynamicForm({
           return renderArrayField(key, value as any[], fieldPath, fieldType.config);
 
         case 'object':
-          return renderObjectField(key, value as Record<string, unknown>, fieldPath, level);
+          return renderObjectField(key, value as Record<string, unknown>, fieldPath, 0);
 
         default: // text
           return (
@@ -378,12 +434,12 @@ export function DynamicForm({
             <div className="w-3 h-3 bg-secondary rounded-full"></div>
             <h3 className="text-lg font-semibold text-gray-800">
               {formatFieldName(key)}
-              <span className="text-xs text-secondary ml-2">�� Object Field</span>
+              <span className="text-xs text-secondary ml-2">Object Field</span>
             </h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {Object.entries(obj).map(([subKey, subValue]) => 
-              renderField(subKey, subValue, `${fieldPath}.${subKey}`, level + 1)
+              renderField(subKey, subValue, `${fieldPath}.${subKey}`)
             )}
           </div>
         </div>
@@ -394,11 +450,9 @@ export function DynamicForm({
     function renderArrayField(key: string, arr: any[], fieldPath: string, config: any): React.ReactNode {
       const currentArray = getFieldValue(fieldPath) as any[] || [];
       
-      // Enhanced template detection for empty arrays
       const inferTemplateFromFieldName = (fieldName: string) => {
         const lowerFieldName = fieldName.toLowerCase();
         
-        // Common patterns for array fields
         if (lowerFieldName.includes('date') || lowerFieldName.includes('special')) {
           return { label: '', date: '' };
         }
@@ -415,20 +469,16 @@ export function DynamicForm({
           return { name: '', value: '' };
         }
         
-        // Default pattern for key-value pairs
         return { label: '', value: '' };
       };
       
       const addItem = () => {
         let newItem;
         if (config.isComplexArray && config.itemTemplate && Object.keys(config.itemTemplate).length > 0) {
-          // Use the getEmptyFormData function from useLookup to create proper empty template
           newItem = getEmptyFormData([config.itemTemplate], Object.keys(config.itemTemplate));
         } else if (currentArray.length > 0 && currentArray[0]) {
-          // Use the first existing item as template
           newItem = getEmptyFormData([currentArray[0]], Object.keys(currentArray[0]));
         } else {
-          // Infer template from field name
           newItem = inferTemplateFromFieldName(key);
         }
         handleFieldChange(fieldPath, [...currentArray, newItem]);
@@ -439,31 +489,19 @@ export function DynamicForm({
         handleFieldChange(fieldPath, newArray);
       };
 
-      const updateItem = (index: number, itemValue: any) => {
-        const newArray = [...currentArray];
-        newArray[index] = itemValue;
-        handleFieldChange(fieldPath, newArray);
-      };
-
-      // Get the template for array items with enhanced fallback logic
       let itemTemplate = config.itemTemplate;
       let templateKeys = Object.keys(itemTemplate || {});
       
-      // If template is empty but we have items, use the first item's structure
       if (templateKeys.length === 0 && currentArray.length > 0 && currentArray[0]) {
         itemTemplate = currentArray[0];
         templateKeys = Object.keys(currentArray[0]);
       }
       
-      // If still no template, infer from field name
       if (templateKeys.length === 0) {
         itemTemplate = inferTemplateFromFieldName(key);
         templateKeys = Object.keys(itemTemplate);
       }
 
-
-
-      // Check if this is a simple key-value structure (like label-value pairs or label-date pairs)
       let isSimpleKeyValue = templateKeys.length === 2 && 
         (templateKeys.includes('label') && (templateKeys.includes('value') || templateKeys.includes('date')) ||
          templateKeys.includes('key') && templateKeys.includes('value') ||
@@ -471,7 +509,6 @@ export function DynamicForm({
          templateKeys.includes('platform') && templateKeys.includes('url') ||
          templateKeys.includes('type') && templateKeys.includes('value'));
 
-      // Fallback: If no template but we have existing items, try to detect from the first item
       if (!isSimpleKeyValue && currentArray.length > 0 && currentArray[0]) {
         const firstItemKeys = Object.keys(currentArray[0]);
         isSimpleKeyValue = firstItemKeys.length === 2 && 
@@ -489,7 +526,7 @@ export function DynamicForm({
               <div className="w-3 h-3 bg-secondary rounded-full"></div>
               <h3 className="text-lg font-semibold text-gray-800">
                 {formatFieldName(key)} ({currentArray.length} items)
-                <span className="text-xs text-secondary ml-2">📋 Array Field</span>
+                <span className="text-xs text-secondary ml-2">Array Field</span>
               </h3>
             </div>
             <Button
@@ -498,7 +535,7 @@ export function DynamicForm({
               variant="outline"
               size="sm"
             >
-              + Add Item
+              Add Item
             </Button>
           </div>
 
@@ -540,7 +577,6 @@ export function DynamicForm({
                   
                   {config.isComplexArray ? (
                     isSimpleKeyValue ? (
-                      // Simple key-value layout for label-value pairs or label-date pairs
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <label className="block text-sm font-medium text-gray-700">
@@ -582,15 +618,12 @@ export function DynamicForm({
                         </div>
                       </div>
                     ) : (
-                      // Complex layout for other structures
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {/* Render fields based on template or existing item structure */}
                         {templateKeys.length > 0 ? (
                           templateKeys.map((subKey) => {
                             const subValue = itemTemplate[subKey];
                             const fieldType = detectFieldType(subKey, subValue, `${fieldPath}[${index}]`);
                             
-                            // Skip internal fields
                             if (!shouldDisplayField(subKey, subValue)) {
                               return null;
                             }
@@ -601,7 +634,6 @@ export function DynamicForm({
                                   {formatFieldName(subKey)}
                                 </label>
                                 
-                                {/* Render appropriate input based on field type */}
                                 {fieldType.type === 'date' ? (
                                   <Input
                                     type="date"
@@ -616,7 +648,6 @@ export function DynamicForm({
                                     className="h-10 w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                   >
                                     <option value="">Select {formatFieldName(subKey)}</option>
-                                    {/* Add common options for special dates */}
                                     {subKey === 'label' && [
                                       'Birthday', 'Anniversary', 'Wedding', 'Graduation', 
                                       'Holiday', 'Meeting', 'Appointment', 'Other'
@@ -663,7 +694,11 @@ export function DynamicForm({
                     <Input
                       type="text"
                       value={item || ''}
-                      onChange={(e) => updateItem(index, e.target.value)}
+                      onChange={(e) => {
+                        const newArray = [...currentArray];
+                        newArray[index] = e.target.value;
+                        handleFieldChange(fieldPath, newArray);
+                      }}
                       placeholder={`Enter ${formatFieldName(key)} item`}
                       className="h-10 w-full"
                     />
@@ -676,179 +711,264 @@ export function DynamicForm({
       );
     }
 
-         // Group fields by type for better organization
-     function organizeFields(obj: Record<string, unknown>, parentPath = ''): {
-       basic: Array<[string, unknown, string]>;
-       lookup: Array<[string, unknown, string]>;
-       status: Array<[string, unknown, string]>;
-       complex: Array<[string, unknown, string]>;
-     } {
-       const groups: {
-         basic: Array<[string, unknown, string]>;
-         lookup: Array<[string, unknown, string]>;
-         status: Array<[string, unknown, string]>;
-         complex: Array<[string, unknown, string]>;
-       } = { 
-         basic: [] as Array<[string, unknown, string]>, 
-         lookup: [] as Array<[string, unknown, string]>, 
-         status: [] as Array<[string, unknown, string]>, 
-         complex: [] as Array<[string, unknown, string]> 
-       };
-       
-       Object.entries(obj).forEach(([key, value]) => {
-         // Skip fields that shouldn't be displayed (including "is" fields)
-         if (!shouldDisplayField(key, value)) {
-           return;
-         }
-         
-         const fieldPath = parentPath ? `${parentPath}.${key}` : key;
-         const fieldType = detectFieldType(key, value, parentPath);
-         
-         if (fieldType.type === 'lookup') {
-           groups.lookup.push([key, value, fieldPath]);
-         } else if (fieldType.type === 'status') {
-           groups.status.push([key, value, fieldPath]);
-         } else if (fieldType.type === 'array' || fieldType.type === 'object') {
-           groups.complex.push([key, value, fieldPath]);
-         } else {
-           groups.basic.push([key, value, fieldPath]);
-         }
-       });
-       
-       return groups;
-     }
-
-    const fieldGroups = organizeFields(formState);
-
-    function handleSubmit(e: React.FormEvent) {
-      e.preventDefault();
-      
-      // Use the filterSubmitFields function from useLookup hook
-      // This ensures only relevant fields are submitted for both POST and PATCH operations
+    function handleSubmit() {
       const cleanedFormState = filterSubmitFields(formState);
-      
       console.log('Submitting cleaned form state:', cleanedFormState);
       onSubmit(cleanedFormState);
     }
 
-<<<<<<< HEAD
-    return (
-      <form
-        onSubmit={handleSubmit}
-        className="fixed inset-0 z-50 w-screen h-screen bg-white px-6 py-6 m-0 flex flex-col overflow-auto"
-      >
-        <div className="mb-6 px-6  py-6 bg-primary">
-=======
-    // Reset form to initial state
-    function resetForm() {
-      setFormState(initialData);
+    function nextStep() {
+      if (currentStep < steps.length - 1) {
+        setCurrentStep(currentStep + 1);
+      }
     }
 
-         return (
-       <form
-         onSubmit={handleSubmit}
-         className="w-full h-full bg-white p-0 m-0 flex flex-col overflow-auto"
-       >
-        <div className="mb-6 px-6 pt-6">
->>>>>>> origin/master
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+    function prevStep() {
+      if (currentStep > 0) {
+        setCurrentStep(currentStep - 1);
+      }
+    }
+
+    function goToStep(stepIndex: number) {
+      if (stepIndex >= 0 && stepIndex < steps.length) {
+        setCurrentStep(stepIndex);
+      }
+    }
+
+    if (steps.length === 0) {
+      return (
+        <div className="w-full h-full bg-white p-6 flex items-center justify-center">
+          <p className="text-gray-500">No form fields available</p>
+        </div>
+      );
+    }
+
+    const currentStepData = steps[currentStep];
+
+    return (
+      <div className="w-full h-full bg-white flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+          <h2 className="text-2xl font-bold mb-2">
             {Object.keys(formState).some(k => formState[k] && typeof formState[k] === 'object' && (formState[k] as any)._id) 
               ? 'Edit Item' 
               : 'Add New Item'
             }
           </h2>
-          <p className="text-white">
-            Form fields are automatically generated based on your JSON data structures
+          <p className="text-blue-100">
+            Complete the form step by step with organized field types
           </p>
         </div>
 
+        {/* Stepper */}
+        <div className="px-6 py-4 bg-gray-50 border-b">
+          <div className="flex items-center justify-between">
+            {steps.map((step, index) => (
+              <div key={index} className="flex items-center">
+                <button
+                  type="button"
+                  onClick={() => goToStep(index)}
+                  className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-200 ${
+                    index === currentStep
+                      ? 'bg-blue-600 border-blue-600 text-white'
+                      : index < currentStep
+                      ? 'bg-green-500 border-green-500 text-white'
+                      : 'bg-white border-gray-300 text-gray-400 hover:border-gray-400'
+                  }`}
+                >
+                  {index < currentStep ? (
+                    <Check className="w-5 h-5" />
+                  ) : (
+                    <span className="text-sm font-semibold">{index + 1}</span>
+                  )}
+                </button>
+                
+                <div className="ml-3 mr-8">
+                  <button
+                    type="button"
+                    onClick={() => goToStep(index)}
+                    className={`text-sm font-medium transition-colors ${
+                      index === currentStep
+                        ? 'text-blue-600'
+                        : index < currentStep
+                        ? 'text-green-600'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {step.title}
+                  </button>
+                  <div className={`text-xs ${
+                    index === currentStep ? 'text-blue-500' : 'text-gray-400'
+                  }`}>
+                    {step.fields.length} field{step.fields.length !== 1 ? 's' : ''}
+                  </div>
+                </div>
 
-        <div className="flex-1 px-6 space-y-6 overflow-y-auto">
-          {/* Basic Fields */}
-          {fieldGroups.basic.length > 0 && (
-            <section>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-1 h-6 bg-primary rounded-full"></div>
-                <h3 className="text-xl font-semibold text-gray-800">Basic Information</h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {fieldGroups.basic.map(([key, value, fieldPath]) => 
-                  renderField(key, value, fieldPath)
+                {index < steps.length - 1 && (
+                  <ChevronRight className="w-5 h-5 text-gray-300 mx-2" />
                 )}
               </div>
-            </section>
-          )}
-
-          {/* Lookup Fields */}
-          {fieldGroups.lookup.length > 0 && (
-            <section>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-1 h-6 bg-primary rounded-full"></div>
-                <h3 className="text-xl font-semibold text-gray-800">Related Data</h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {fieldGroups.lookup.map(([key, value, fieldPath]) => 
-                  renderField(key, value, fieldPath)
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* Status Fields */}
-          {fieldGroups.status.length > 0 && (
-            <section>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-1 h-6 bg-secondary rounded-full"></div>
-                <h3 className="text-xl font-semibold text-gray-800">Status & State</h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {fieldGroups.status.map(([key, value, fieldPath]) => 
-                  renderField(key, value, fieldPath)
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* Complex Fields */}
-          {fieldGroups.complex.length > 0 && (
-            <section>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-1 h-6 bg-secondary rounded-full"></div>
-                <h3 className="text-xl font-semibold text-gray-800">Complex Data</h3>
-              </div>
-              <div className="space-y-4">
-                {fieldGroups.complex.map(([key, value, fieldPath]) => 
-                  renderField(key, value, fieldPath)
-                )}
-              </div>
-            </section>
-          )}
+            ))}
+          </div>
         </div>
 
-        {/* Form Actions */}
-        <div className="flex justify-end gap-3 p-6 border-t border-gray-200 bg-white sticky bottom-0">
-          <Button
-            type="button"
-            onClick={onCancel}
-            disabled={isLoading}
-            variant="outline"
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Saving...
-              </>
+        {/* Current Step Content */}
+        <div className="flex-1 px-6 py-6 overflow-y-auto">
+          <div className="max-w-4xl mx-auto">
+            <div className="mb-6">
+              <h3 className="text-xl font-semibold text-gray-800 mb-2">
+                {currentStepData.title}
+              </h3>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
+                />
+              </div>
+              <p className="text-sm text-gray-500 mt-2">
+                Step {currentStep + 1} of {steps.length}
+              </p>
+            </div>
+
+            {currentStepData.stepType === 'basic' ? (
+              // Basic step with type-organized sections
+              <div className="space-y-8">
+                {/* Organize basic step fields by type */}
+                {(() => {
+                  const basicFields = currentStepData.fields.filter(([key, value, fieldPath]) => {
+                    const fieldType = detectFieldType(key, value, fieldPath.split('.').slice(0, -1).join('.'));
+                    return !['lookup', 'status'].includes(fieldType.type);
+                  });
+                  
+                  const lookupFields = currentStepData.fields.filter(([key, value, fieldPath]) => {
+                    const fieldType = detectFieldType(key, value, fieldPath.split('.').slice(0, -1).join('.'));
+                    return fieldType.type === 'lookup';
+                  });
+                  
+                  const statusFields = currentStepData.fields.filter(([key, value, fieldPath]) => {
+                    const fieldType = detectFieldType(key, value, fieldPath.split('.').slice(0, -1).join('.'));
+                    return fieldType.type === 'status';
+                  });
+
+                  return (
+                    <>
+                      {/* Basic Fields */}
+                      {basicFields.length > 0 && (
+                        <section>
+                          <div className="flex items-center gap-2 mb-4">
+                            <div className="w-1 h-6 bg-blue-600 rounded-full"></div>
+                            <h4 className="text-lg font-semibold text-gray-800">Core Information</h4>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {basicFields.map(([key, value, fieldPath]) => 
+                              renderField(key, value, fieldPath)
+                            )}
+                          </div>
+                        </section>
+                      )}
+
+                      {/* Lookup Fields */}
+                      {lookupFields.length > 0 && (
+                        <section>
+                          <div className="flex items-center gap-2 mb-4">
+                            <div className="w-1 h-6 bg-blue-600 rounded-full"></div>
+                            <h4 className="text-lg font-semibold text-gray-800">Related Data</h4>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {lookupFields.map(([key, value, fieldPath]) => 
+                              renderField(key, value, fieldPath)
+                            )}
+                          </div>
+                        </section>
+                      )}
+
+                      {/* Status Fields */}
+                      {statusFields.length > 0 && (
+                        <section>
+                          <div className="flex items-center gap-2 mb-4">
+                            <div className="w-1 h-6 bg-amber-500 rounded-full"></div>
+                            <h4 className="text-lg font-semibold text-gray-800">Status & State</h4>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {statusFields.map(([key, value, fieldPath]) => 
+                              renderField(key, value, fieldPath)
+                            )}
+                          </div>
+                        </section>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
             ) : (
-              'Save Changes'
+              // Complex step - single complex field
+              <div className="space-y-6">
+                {currentStepData.fields.map(([key, value, fieldPath]) => 
+                  renderField(key, value, fieldPath)
+                )}
+              </div>
             )}
-          </Button>
+          </div>
         </div>
-      </form>
+
+        {/* Navigation Footer */}
+        <div className="px-6 py-4 border-t border-gray-200 bg-white">
+          <div className="flex justify-between items-center">
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                onClick={onCancel}
+                disabled={isLoading}
+                variant="outline"
+              >
+                Cancel
+              </Button>
+              
+              {currentStep > 0 && (
+                <Button
+                  type="button"
+                  onClick={prevStep}
+                  disabled={isLoading}
+                  variant="outline"
+                >
+                  <ChevronLeft className="w-4 h-4 mr-2" />
+                  Previous
+                </Button>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              {currentStep < steps.length - 1 ? (
+                <Button
+                  type="button"
+                  onClick={nextStep}
+                  disabled={isLoading}
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4 ml-2" />
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSubmit}
+                  disabled={isLoading}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {isLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4 mr-2" />
+                      Complete
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     );
-  }
+}
