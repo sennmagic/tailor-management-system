@@ -501,8 +501,13 @@ export function useLookup({
     }
 
     // Status field detection
-    if (lowerKey.includes('status') || lowerKey.includes('state') || 
-        lowerKey.includes('condition') || lowerKey.includes('phase')) {
+    if (lowerKey.includes('status') || 
+      lowerKey.includes('state') || 
+      lowerKey.includes('condition') || 
+      lowerKey.includes('phase') ||
+      lowerKey.includes('specialization')||
+      lowerKey.includes('category')  ) 
+          {
       return { 
         type: 'status',
         config: {
@@ -653,7 +658,7 @@ export function useLookup({
     }
     5
     // Logistics Category
-    if (lower.includes('category') && lower.includes('logistics')) {
+    if (lower.includes('category') ) {
       return ['AC Repair', 'Laundry Service', 'Plumbing', 'Electrical', 'Carpentry', 'Pest Control', 'Internet Provider', 'Security Service', 'Courier', 'Water Supply', 'Cleaning Service', 'Other'];
     }
     

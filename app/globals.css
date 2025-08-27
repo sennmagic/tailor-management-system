@@ -282,3 +282,8 @@
   font-family: var(--font-playfair-display), "Playfair Display", serif;
   font-weight: 700;
 }
+
+h2 {
+  color: #ffffff; /* Tailwind green-800 */
+  font-size: 1.5rem;
+}

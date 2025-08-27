@@ -31,8 +31,8 @@ function Modal({ open, onClose, children, isFullScreen = false }: { open: boolea
   
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="rounded shadow-lg max-w-lg w-full p-6 relative">
-        <button onClick={onClose} className="absolute top-2 right-2 text-gray-500 hover:text-black text-xl">&times;</button>
+      <div className="rounded-2xl shadow-lg max-w-lg w-full p-6 relative bg-white/95">
+        <button onClick={onClose} className="absolute top-2 right-4 text-gray-800 hover:text-black text-2xl">&times;</button>
         {children}
       </div>
     </div>
@@ -203,13 +203,13 @@ function ViewDetailsModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 bg-white">
+    <div className="fixed inset-0 z-50 px-6 py-6 bg-white">
       {/* Header */}
-      <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-green-700 shadow-sm">
         <h2 className="text-2xl font-semibold text-gray-900">Item Details</h2>
         <button 
           onClick={onClose} 
-          className="text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
+          className="text-white hover:text-gray-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
         >
           <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -921,12 +921,13 @@ export default function SlugPage() {
         </Modal>
       )}
       <Modal open={deleteIdx !== null} onClose={() => setDeleteIdx(null)}>
-        <h2 className="text-lg font-semibold mb-2">Are you sure you want to delete?</h2>
+        <h2 className=" !text-black text-lg font-semibold mb-2 ">Are you sure you want to delete?</h2>
         <div className="flex gap-2 mt-4">
                   <Button 
                     onClick={() => handleDelete(deleteIdx as number)} 
                     variant="destructive"
                     disabled={isDeleting === deleteIdx}
+                    className="hover:bg-red-700"
                   >
           {isDeleting === deleteIdx ? (
             <div className="flex items-center gap-2">
