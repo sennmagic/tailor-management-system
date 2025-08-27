@@ -745,13 +745,11 @@ export function DynamicForm({
 
     const currentStepData = steps[currentStep];
 
-         return (
-       <form
-         onSubmit={handleSubmit}
-         className="w-full h-full bg-white p-0 m-0 flex flex-col overflow-auto"
-       >
-        <div className="mb-6 px-6 pt-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+    return (
+      <div className="w-full h-full bg-white flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="px-6 py-4 bg-green-700 text-white">
+          <h2 className="text-2xl font-bold mb-2">
             {Object.keys(formState).some(k => formState[k] && typeof formState[k] === 'object' && (formState[k] as any)._id) 
               ? 'Edit Item' 
               : 'Add New Item'
