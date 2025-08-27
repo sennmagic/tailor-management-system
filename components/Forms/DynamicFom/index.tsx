@@ -748,7 +748,7 @@ export function DynamicForm({
     return (
       <div className="w-full h-full bg-white flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+        <div className="px-6 py-4 bg-green-700 text-white">
           <h2 className="text-2xl font-bold mb-2">
             {Object.keys(formState).some(k => formState[k] && typeof formState[k] === 'object' && (formState[k] as any)._id) 
               ? 'Edit Item' 
@@ -770,7 +770,7 @@ export function DynamicForm({
                   onClick={() => goToStep(index)}
                   className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-200 ${
                     index === currentStep
-                      ? 'bg-blue-600 border-blue-600 text-white'
+                      ? 'bg-green-700 border-green- 700 text-white'
                       : index < currentStep
                       ? 'bg-green-500 border-green-500 text-white'
                       : 'bg-white border-gray-300 text-gray-400 hover:border-gray-400'
@@ -789,7 +789,7 @@ export function DynamicForm({
                     onClick={() => goToStep(index)}
                     className={`text-sm font-medium transition-colors ${
                       index === currentStep
-                        ? 'text-blue-600'
+                        ? 'text-green-700'
                         : index < currentStep
                         ? 'text-green-600'
                         : 'text-gray-500 hover:text-gray-700'
@@ -798,7 +798,7 @@ export function DynamicForm({
                     {step.title}
                   </button>
                   <div className={`text-xs ${
-                    index === currentStep ? 'text-blue-500' : 'text-gray-400'
+                    index === currentStep ? 'text-green-700' : 'text-gray-400'
                   }`}>
                     {step.fields.length} field{step.fields.length !== 1 ? 's' : ''}
                   </div>
@@ -821,7 +821,7 @@ export function DynamicForm({
               </h3>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  className="bg-green-700 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
                 />
               </div>
@@ -856,7 +856,7 @@ export function DynamicForm({
                       {basicFields.length > 0 && (
                         <section>
                           <div className="flex items-center gap-2 mb-4">
-                            <div className="w-1 h-6 bg-blue-600 rounded-full"></div>
+                            <div className="w-1 h-6 bg-green-700 rounded-full"></div>
                             <h4 className="text-lg font-semibold text-gray-800">Core Information</h4>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
