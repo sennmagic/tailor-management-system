@@ -26,7 +26,6 @@ export function useFormValidation<T extends Record<string, any>>(
 
   // Update data when initialData changes
   useEffect(() => {
-    console.log('🔄 useFormValidation: Updating data with new initialData:', initialData)
     setData(initialData)
   }, [initialData])
 

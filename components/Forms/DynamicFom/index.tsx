@@ -24,13 +24,13 @@ export function DynamicForm({
       lookupErrors,
       detectFieldType,
       formatFieldName,
-      
       shouldDisplayField,
-      
       fetchLookupOptions,
       resetLookups,
       filterSubmitFields,
       getEmptyFormData,
+      getStatusOptions, // Add this from useLookup
+      isStatusField     // Add this from useLookup
     } = useLookup({ data });
 
     
@@ -255,13 +255,16 @@ export function DynamicForm({
               {isLoading && (
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                  Loading {fieldType.config?.entityName || 'options'}...
+                      {fieldType.config?.entityName || 'options'}...
                 </div>
               )}
             </div>
           );
 
         case 'status':
+          // Get status options using the hook's function
+          const statusOptions = getStatusOptions(key);
+          
           return (
             <div key={fieldPath} className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
@@ -273,8 +276,8 @@ export function DynamicForm({
                 onChange={(e) => handleFieldChange(fieldPath, e.target.value)}
                 className={commonInputProps.className}
               >
-                <option value="">Select Status</option>
-                {fieldType.config?.options.map((status: string) => (
+                <option value="">Select {formatFieldName(key)}</option>
+                {statusOptions.map((status: string) => (
                   <option key={status} value={status}>
                     {status.charAt(0).toUpperCase() + status.slice(1).replace(/-/g, ' ')}
                   </option>
@@ -378,7 +381,7 @@ export function DynamicForm({
             <div className="w-3 h-3 bg-secondary rounded-full"></div>
             <h3 className="text-lg font-semibold text-gray-800">
               {formatFieldName(key)}
-              <span className="text-xs text-secondary ml-2">�� Object Field</span>
+              <span className="text-xs text-secondary ml-2">📁 Object Field</span>
             </h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -460,8 +463,6 @@ export function DynamicForm({
         itemTemplate = inferTemplateFromFieldName(key);
         templateKeys = Object.keys(itemTemplate);
       }
-
-
 
       // Check if this is a simple key-value structure (like label-value pairs or label-date pairs)
       let isSimpleKeyValue = templateKeys.length === 2 && 
@@ -609,6 +610,18 @@ export function DynamicForm({
                                     onChange={(e) => handleFieldChange(`${fieldPath}[${index}].${subKey}`, e.target.value)}
                                     className="h-10 w-full text-sm"
                                   />
+                                ) : fieldType.type === 'status' ? (
+                                  // Use the proper status field rendering with correct options
+                                  <select
+                                    value={getFieldValue(`${fieldPath}[${index}].${subKey}`) || ''}
+                                    onChange={(e) => handleFieldChange(`${fieldPath}[${index}].${subKey}`, e.target.value)}
+                                    className="h-10 w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  >
+                                    <option value="">Select {formatFieldName(subKey)}</option>
+                                    {getStatusOptions(subKey).map(option => (
+                                      <option key={option} value={option}>{option}</option>
+                                    ))}
+                                  </select>
                                 ) : fieldType.type === 'lookup' ? (
                                   <select
                                     value={getFieldValue(`${fieldPath}[${index}].${subKey}`) || ''}

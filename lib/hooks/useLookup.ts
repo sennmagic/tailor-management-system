@@ -630,12 +630,15 @@ export function useLookup({
     }
     
     // Factory Specialization
-    if (lower.includes('specialization')) {
+    if (lower.includes('specialization') || lower.includes('specialization')) {
       return ['Daura Suruwal', 'Shirt', 'Pant', 'Coat', 'Tie', 'Cufflinks', 'Waistcoat', 'Blazer', 'Other'];
     }
     
     // Factory Status
     if (lower.includes('status') && lower.includes('factory')) {
+      return ['Available', 'Busy', 'Inactive', 'Working'];
+    }
+     if (lower.includes('unit') && lower.includes('factory')) {
       return ['Available', 'Busy', 'Inactive', 'Working'];
     }
     
@@ -648,7 +651,7 @@ export function useLookup({
     if (lower.includes('status') && lower.includes('measurement')) {
       return ['DRAFT', 'COMPLETED', 'IN PROGRESS'];
     }
-    
+    5
     // Logistics Category
     if (lower.includes('category') && lower.includes('logistics')) {
       return ['AC Repair', 'Laundry Service', 'Plumbing', 'Electrical', 'Carpentry', 'Pest Control', 'Internet Provider', 'Security Service', 'Courier', 'Water Supply', 'Cleaning Service', 'Other'];
@@ -695,8 +698,8 @@ export function useLookup({
     }
     
     // Appointment Source
-    if (lower.includes('source') && lower.includes('appointment')) {
-      return ['Call', 'WhatsApp', 'Walk-In', 'Website', 'Other'];
+    if (lower.includes('Booking Channel') && lower.includes('appointment')) {
+      return ['Call', 'WhatsApp', 'Walk-In', 'Website', 'e'];
     }
     
     // Appointment Type
