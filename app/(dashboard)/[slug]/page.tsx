@@ -17,6 +17,121 @@ import { useLookup } from "@/lib/hooks/useLookup";
 import Link from "next/link";
 
 
+function analyzeBFS(obj: any): { keys: string[], type: string } | null {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
+
+  const queue = [obj];
+  const visited = new Set();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || visited.has(current)) continue;
+    visited.add(current);
+
+    const keys = Object.keys(current).filter(
+      (k) => k !== "_id" && k !== "__v" && k !== "createdAt" && k !== "updatedAt"
+    );
+
+    // ✅ Dynamic value-unit (any numeric + unit-like key)
+    const numericKey = keys.find(
+      (k) => typeof current[k] === "number" || !isNaN(Number(current[k]))
+    );
+    const unitKey = keys.find(
+      (k) =>
+        k.toLowerCase().includes("unit") ||
+        k.toLowerCase().includes("currency") ||
+        k.toLowerCase().includes("symbol")
+    );
+    if (numericKey && unitKey) {
+      return { keys: [numericKey, unitKey], type: "value-unit" };
+    }
+
+    // Dynamic name-code
+    const nameKey = keys.find((k) => k.toLowerCase().includes("name"));
+    const codeKey = keys.find(
+      (k) => k.toLowerCase().includes("code") || k.toLowerCase().includes("number")
+    );
+    if (nameKey && codeKey) {
+      return { keys: [nameKey, codeKey], type: "name-code" };
+    }
+
+    // Dynamic display name
+    const displayKey = keys.find((k) =>
+      ["name", "displayname", "title", "label"].some((d) => d === k.toLowerCase())
+    );
+    if (displayKey) {
+      return { keys: [displayKey], type: "display-name" };
+    }
+
+    // BFS nested objects
+    keys.forEach((key) => {
+      const value = current[key];
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        queue.push(value);
+      }
+    });
+  }
+
+  return null;
+}
+
+function renderObjectBFS(value: unknown): React.ReactNode {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' 
+      ? String(value) : <span className="text-gray-400">-</span>;
+  }
+  
+  const obj = value as Record<string, unknown>;
+  const pattern = analyzeBFS(obj);
+  
+  if (!pattern) {
+    const entries = Object.entries(obj).filter(([k, v]) => 
+      k !== '_id' && k !== '__v' && v !== null && v !== undefined && v !== ''
+    );
+    
+    if (entries.length === 0) return <span className="text-gray-400">No data</span>;
+    if (entries.length <= 2) {
+      return (
+        <div className="text-sm">
+          {entries.map(([k, v]) => (
+            <div key={k} className="flex items-center gap-1">
+              <span className="text-gray-600 text-xs">{k}:</span>
+              <span className="font-medium">{String(v)}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return <span className="text-gray-400">Object</span>;
+  }
+  
+  switch (pattern.type) {
+    case 'value-unit':
+      const val = obj[pattern.keys[0]];
+      const unit = obj[pattern.keys[1]];
+      return val !== null && val !== undefined && unit ? (
+        <span className="flex items-center gap-1">
+          <span className="font-medium">{String(val)}</span>
+          <span className="text-gray-500 text-xs">{String(unit)}</span>
+        </span>
+      ) : <span className="text-gray-400">-</span>;
+    
+    case 'name-code':
+      const parts = pattern.keys.map(key => obj[key]).filter(Boolean);
+      return parts.length > 0 ? (
+        <span>{parts.join(' - ')}</span>
+      ) : <span className="text-gray-400">-</span>;
+    
+    case 'display-name':
+      const displayValue = obj[pattern.keys[0]];
+      return displayValue ? <span>{String(displayValue)}</span> : <span className="text-gray-400">-</span>;
+    
+    default:
+      return <span className="text-gray-400">Object</span>;
+  }
+}
+
+
 
 function Modal({ open, onClose, children, isFullScreen = false }: { open: boolean; onClose: () => void; children: React.ReactNode; isFullScreen?: boolean }) {
   if (!open) return null;
@@ -514,6 +629,9 @@ export default function SlugPage() {
       );
     }
     
+     if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return renderObjectBFS(value);
+  }
     if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
       return String(value);
     }

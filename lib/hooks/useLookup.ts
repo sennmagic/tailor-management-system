@@ -807,11 +807,145 @@ export function useLookup({
       if (Array.isArray(value)) {
         return value.length === 0 ? "No items" : `${value.length} item(s)`;
       }
-      if (Object.keys(value).length === 0) return "No data";
-      return "Object data";
+      const obj = value as Record<string, unknown>;
+    
+    // BFS pattern detection for objects
+    const queue: Record<string, unknown>[] = [obj];
+    const visited = new Set<Record<string, unknown>>();
+    
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current || visited.has(current)) continue;
+      visited.add(current);
+      
+      const keys = Object.keys(current).filter(k => 
+        k !== '_id' && k !== '__v' && k !== 'createdAt' && k !== 'updatedAt'
+      );
+      
+      // Check for value-unit pattern
+    if (keys.length === 2) {
+  const firstKey = keys[0];
+  const secondKey = keys[1];
+  const firstVal = current[firstKey];
+  const secondVal = current[secondKey];
+  
+  if (firstVal !== null && firstVal !== undefined && 
+      secondVal !== null && secondVal !== undefined) {
+    
+    // Determine which should be primary based on data type
+    const isFirstNumeric = !isNaN(Number(firstVal)) && typeof firstVal !== 'string';
+    const isSecondNumeric = !isNaN(Number(secondVal)) && typeof secondVal !== 'string';
+    
+    // If first is numeric and second is not, assume value-unit pattern
+    if (isFirstNumeric && !isSecondNumeric) {
+      return `${String(firstVal)} ${String(secondVal)}`;
     }
-    return String(value);
-  }, []);
+    // If second is numeric and first is not, reverse it
+    else if (!isFirstNumeric && isSecondNumeric) {
+      return `${String(secondVal)} ${String(firstVal)}`;
+    }
+    // If both are same type, use order or semantic hints
+    else {
+      // Check if field names suggest an order
+      const firstKeyLower = firstKey.toLowerCase();
+      const secondKeyLower = secondKey.toLowerCase();
+      
+      // Value/quantity fields should come first
+      if (firstKeyLower.includes('value') || firstKeyLower.includes('amount') || 
+          firstKeyLower.includes('quantity') || firstKeyLower.includes('number')) {
+        return `${String(firstVal)} ${String(secondVal)}`;
+      }
+      if (secondKeyLower.includes('value') || secondKeyLower.includes('amount') || 
+          secondKeyLower.includes('quantity') || secondKeyLower.includes('number')) {
+        return `${String(secondVal)} ${String(firstVal)}`;
+      }
+      
+      // Default: use array order with separator
+      return `${String(firstVal)} - ${String(secondVal)}`;
+    }
+  }
+}
+
+// For objects with more than 2 keys, try to find the best 2
+if (keys.length > 2) {
+  // Look for common primary-secondary patterns
+  let primaryKey = null;
+  let secondaryKey = null;
+  
+  // Find primary key (value-like)
+  primaryKey = keys.find(k => {
+    const lower = k.toLowerCase();
+    return lower.includes('value') || lower.includes('amount') || 
+           lower.includes('quantity') || lower.includes('number') ||
+           lower.includes('price') || lower.includes('cost');
+  });
+  
+  // Find secondary key (unit-like)
+  if (primaryKey) {
+    secondaryKey = keys.find(k => k !== primaryKey && (
+      k.toLowerCase().includes('unit') || k.toLowerCase().includes('type') ||
+      k.toLowerCase().includes('currency') || k.toLowerCase().includes('measure')
+    ));
+  }
+  
+  // If found a good pair, use them
+  if (primaryKey && secondaryKey) {
+    const primaryVal = current[primaryKey];
+    const secondaryVal = current[secondaryKey];
+    if (primaryVal !== null && primaryVal !== undefined && 
+        secondaryVal !== null && secondaryVal !== undefined) {
+      return `${String(primaryVal)} ${String(secondaryVal)}`;
+    }
+  }
+  
+  // Fallback: use first two non-null values
+  const validKeys = keys.filter(k => current[k] !== null && current[k] !== undefined);
+  if (validKeys.length >= 2) {
+    const val1 = current[validKeys[0]];
+    const val2 = current[validKeys[1]];
+    return `${String(val1)} - ${String(val2)}`;
+  }
+}
+      // Check for name-code pattern
+      const nameKey = keys.find(k => k.toLowerCase().includes('name'));
+      const codeKey = keys.find(k => k.toLowerCase().includes('code') || k.toLowerCase().includes('number'));
+      if (nameKey && codeKey && current[nameKey] && current[codeKey]) {
+        return `${String(current[nameKey])} - ${String(current[codeKey])}`;
+      }
+      
+      // Check for display name pattern
+      const displayKey = keys.find(k => ['name', 'displayName', 'title', 'label', 'catalogName'].includes(k));
+      if (displayKey && current[displayKey]) {
+        return String(current[displayKey]);
+      }
+      
+      // Add nested objects to queue with proper type checking
+      keys.forEach(key => {
+        const nestedValue = current[key];
+        if (nestedValue && 
+            typeof nestedValue === 'object' && 
+            !Array.isArray(nestedValue) && 
+            nestedValue.constructor === Object) {
+          queue.push(nestedValue as Record<string, unknown>);
+        }
+      });
+    }
+    
+    // Fallback for objects without detected patterns
+    const entries = Object.entries(obj).filter(([k, v]) => 
+      k !== '_id' && k !== '__v' && v !== null && v !== undefined && v !== ''
+    );
+    
+    if (entries.length === 0) return "No data";
+    if (entries.length <= 2) {
+      return entries.map(([k, v]) => `${k}: ${String(v)}`).join(', ');
+    }
+    
+    return "Object data";
+  }
+  
+  return String(value);
+}, []);
 
   // Check if field should be displayed
   const shouldDisplayField = useCallback((key: string, value: unknown): boolean => {
