@@ -746,66 +746,66 @@ export function DynamicForm({
     const currentStepData = steps[currentStep];
 
     return (
-      <div className="w-full h-full bg-white flex flex-col overflow-hidden">
+      <div className="w-full h-full bg-white flex flex-col overflow-hidden scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
         {/* Header */}
-        <div className="px-6 py-4 bg-green-700 text-white">
-          <h2 className="text-2xl font-bold mb-2">
+        <div className="px-8 py-6 bg-gradient-to-r from-[#2e7d32] to-[#18281f] text-white">
+          <h2 className="text-3xl font-bold mb-2">
             {Object.keys(formState).some(k => formState[k] && typeof formState[k] === 'object' && (formState[k] as any)._id) 
               ? 'Edit Item' 
               : 'Add New Item'
             }
           </h2>
-          <p className="text-blue-100">
+          <p className="text-green-100 text-lg">
             Complete the form step by step with organized field types
           </p>
         </div>
 
         {/* Stepper */}
-        <div className="px-6 py-4 bg-gray-50 border-b">
-          <div className="flex items-center justify-between">
+        <div className="px-8 py-6 bg-gray-50 border-b">
+          <div className="flex items-center space-x-8">
             {steps.map((step, index) => (
               <div key={index} className="flex items-center">
                 <button
                   type="button"
                   onClick={() => goToStep(index)}
-                  className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-200 ${
+                  className={`flex items-center justify-center w-12 h-12 rounded-full border-2 transition-all duration-200 ${
                     index === currentStep
-                      ? 'bg-green-700 border-green- 700 text-white'
+                      ? 'bg-[#2e7d32] border-[#2e7d32] text-white shadow-lg'
                       : index < currentStep
-                      ? 'bg-green-500 border-green-500 text-white'
+                      ? 'bg-[#2e7d32] border-[#2e7d32] text-white'
                       : 'bg-white border-gray-300 text-gray-400 hover:border-gray-400'
                   }`}
                 >
                   {index < currentStep ? (
-                    <Check className="w-5 h-5" />
+                    <Check className="w-6 h-6" />
                   ) : (
-                    <span className="text-sm font-semibold">{index + 1}</span>
+                    <span className="text-lg font-bold">{index + 1}</span>
                   )}
                 </button>
                 
-                <div className="ml-3 mr-8">
+                <div className="ml-4">
                   <button
                     type="button"
                     onClick={() => goToStep(index)}
-                    className={`text-sm font-medium transition-colors ${
+                    className={`text-base font-semibold transition-colors ${
                       index === currentStep
-                        ? 'text-green-700'
+                        ? 'text-[#2e7d32]'
                         : index < currentStep
-                        ? 'text-green-600'
+                        ? 'text-[#2e7d32]'
                         : 'text-gray-500 hover:text-gray-700'
                     }`}
                   >
                     {step.title}
                   </button>
-                  <div className={`text-xs ${
-                    index === currentStep ? 'text-green-700' : 'text-gray-400'
+                  <div className={`text-sm ${
+                    index === currentStep ? 'text-[#2e7d32]' : 'text-gray-400'
                   }`}>
                     {step.fields.length} field{step.fields.length !== 1 ? 's' : ''}
                   </div>
                 </div>
 
                 {index < steps.length - 1 && (
-                  <ChevronRight className="w-5 h-5 text-gray-300 mx-2" />
+                  <ChevronRight className="w-6 h-6 text-gray-300 mx-4" />
                 )}
               </div>
             ))}
@@ -813,19 +813,19 @@ export function DynamicForm({
         </div>
 
         {/* Current Step Content */}
-        <div className="flex-1 px-6 py-6 overflow-y-auto">
-          <div className="max-w-4xl mx-auto">
-            <div className="mb-6">
-              <h3 className="text-xl font-semibold text-gray-800 mb-2">
+        <div className="flex-1 px-8 py-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
+          <div className="max-w-5xl mx-auto">
+            <div className="mb-8">
+              <h3 className="text-2xl font-bold text-gray-800 mb-4">
                 {currentStepData.title}
               </h3>
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="w-full bg-gray-200 rounded-full h-3">
                 <div
-                  className="bg-green-700 h-2 rounded-full transition-all duration-300"
+                  className="bg-[#2e7d32] h-3 rounded-full transition-all duration-300"
                   style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
                 />
               </div>
-              <p className="text-sm text-gray-500 mt-2">
+              <p className="text-base text-gray-600 mt-3">
                 Step {currentStep + 1} of {steps.length}
               </p>
             </div>
@@ -854,12 +854,12 @@ export function DynamicForm({
                     <>
                       {/* Basic Fields */}
                       {basicFields.length > 0 && (
-                        <section>
-                          <div className="flex items-center gap-2 mb-4">
-                            <div className="w-1 h-6 bg-green-700 rounded-full"></div>
-                            <h4 className="text-lg font-semibold text-gray-800">Core Information</h4>
+                        <section className="mb-8">
+                          <div className="flex items-center gap-3 mb-6">
+                            <div className="w-1 h-8 bg-[#2e7d32] rounded-full"></div>
+                            <h4 className="text-xl font-bold text-gray-800">Basic Information</h4>
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {basicFields.map(([key, value, fieldPath]) => 
                               renderField(key, value, fieldPath)
                             )}
@@ -869,12 +869,12 @@ export function DynamicForm({
 
                       {/* Lookup Fields */}
                       {lookupFields.length > 0 && (
-                        <section>
-                          <div className="flex items-center gap-2 mb-4">
-                            <div className="w-1 h-6 bg-blue-600 rounded-full"></div>
-                            <h4 className="text-lg font-semibold text-gray-800">Related Data</h4>
+                        <section className="mb-8">
+                          <div className="flex items-center gap-3 mb-6">
+                            <div className="w-1 h-8 bg-blue-600 rounded-full"></div>
+                            <h4 className="text-xl font-bold text-gray-800">Related Data</h4>
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {lookupFields.map(([key, value, fieldPath]) => 
                               renderField(key, value, fieldPath)
                             )}
@@ -884,12 +884,12 @@ export function DynamicForm({
 
                       {/* Status Fields */}
                       {statusFields.length > 0 && (
-                        <section>
-                          <div className="flex items-center gap-2 mb-4">
-                            <div className="w-1 h-6 bg-amber-500 rounded-full"></div>
-                            <h4 className="text-lg font-semibold text-gray-800">Status & State</h4>
+                        <section className="mb-8">
+                          <div className="flex items-center gap-3 mb-6">
+                            <div className="w-1 h-8 bg-orange-500 rounded-full"></div>
+                            <h4 className="text-xl font-bold text-gray-800">Status & State</h4>
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {statusFields.map(([key, value, fieldPath]) => 
                               renderField(key, value, fieldPath)
                             )}
@@ -912,14 +912,15 @@ export function DynamicForm({
         </div>
 
         {/* Navigation Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 bg-white">
+        <div className="px-8 py-6 border-t border-gray-200 bg-white">
           <div className="flex justify-between items-center">
-            <div className="flex gap-3">
+            <div className="flex gap-4">
               <Button
                 type="button"
                 onClick={onCancel}
                 disabled={isLoading}
                 variant="outline"
+                className="px-6 py-3 text-base font-medium"
               >
                 Cancel
               </Button>
@@ -930,37 +931,39 @@ export function DynamicForm({
                   onClick={prevStep}
                   disabled={isLoading}
                   variant="outline"
+                  className="px-6 py-3 text-base font-medium"
                 >
-                  <ChevronLeft className="w-4 h-4 mr-2" />
+                  <ChevronLeft className="w-5 h-5 mr-2" />
                   Previous
                 </Button>
               )}
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex gap-4">
               {currentStep < steps.length - 1 ? (
                 <Button
                   type="button"
                   onClick={nextStep}
                   disabled={isLoading}
+                  className="bg-[#2e7d32] hover:bg-[#18281f] text-white px-8 py-3 text-base font-medium"
                 >
                   Next
-                  <ChevronRight className="w-4 h-4 ml-2" />
+                  <ChevronRight className="w-5 h-5 ml-2" />
                 </Button>
               ) : (
                 <Button
                   onClick={handleSubmit}
                   disabled={isLoading}
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-[#2e7d32] hover:bg-[#18281f] text-white px-8 py-3 text-base font-medium"
                 >
                   {isLoading ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
                       Saving...
                     </>
                   ) : (
                     <>
-                      <Check className="w-4 h-4 mr-2" />
+                      <Check className="w-5 h-5 mr-2" />
                       Complete
                     </>
                   )}

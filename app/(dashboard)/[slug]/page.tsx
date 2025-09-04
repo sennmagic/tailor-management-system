@@ -91,9 +91,9 @@ function Modal({ open, onClose, children, isFullScreen = false }: { open: boolea
   }
   
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="rounded-2xl shadow-lg max-w-lg w-full p-6 relative bg-white/95">
-        <button onClick={onClose} className="absolute top-2 right-4 text-gray-800 hover:text-black text-2xl">&times;</button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl max-h-[95vh] overflow-hidden">
+        <button onClick={onClose} className="absolute top-4 right-4 z-10 text-gray-600 hover:text-gray-800 text-2xl bg-white rounded-full w-8 h-8 flex items-center justify-center shadow-md">&times;</button>
         {children}
       </div>
     </div>
@@ -152,16 +152,16 @@ function ViewDetailsModal({
 
   function renderNestedData(data: any, title: string): React.ReactNode {
     if (!data || typeof data !== 'object') {
-      return <div className="text-gray-500">No data available</div>;
+      return <div className="text-gray-500 text-center py-4">No data available</div>;
     }
 
     const entries = Object.entries(data);
     if (entries.length === 0) {
-      return <div className="text-gray-500">No data available</div>;
+      return <div className="text-gray-500 text-center py-4">No data available</div>;
     }
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         {entries.map(([key, value]) => {
           if (key === '_id' || key === '__v' || key === 'createdAt' || key === 'updatedAt' || key === 'isDeleted') {
             return null; // Skip internal fields
@@ -173,16 +173,19 @@ function ViewDetailsModal({
             // Nested object - show key-value pairs
             const nestedEntries = Object.entries(value);
             return (
-              <div key={key} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                <div className="font-medium text-gray-700 mb-2">{displayKey}</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+              <div key={key} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-[#2e7d32] rounded-full"></div>
+                  {displayKey}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   {nestedEntries.map(([nestedKey, nestedValue]) => {
                     if (nestedKey === '_id' || nestedKey === '__v') return null;
                     const nestedDisplayKey = nestedKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
                     return (
-                      <div key={nestedKey} className="flex justify-between">
-                        <span className="text-gray-600">{nestedDisplayKey}:</span>
-                        <span className="font-medium">{safeStringifyModal(nestedValue)}</span>
+                      <div key={nestedKey} className="flex justify-between items-center py-2 px-3 bg-white rounded border border-gray-100">
+                        <span className="text-gray-600 font-medium">{nestedDisplayKey}:</span>
+                        <span className="font-semibold text-gray-900">{safeStringifyModal(nestedValue)}</span>
                       </div>
                     );
                   })}
@@ -192,9 +195,9 @@ function ViewDetailsModal({
           } else {
             // Simple value
             return (
-              <div key={key} className="flex justify-between items-center py-2 border-b border-gray-100">
-                <span className="text-gray-600">{displayKey}</span>
-                <span className="font-medium">{safeStringifyModal(value)}</span>
+              <div key={key} className="flex justify-between items-center py-3 px-4 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                <span className="text-gray-600 font-medium">{displayKey}:</span>
+                <span className="font-semibold text-gray-900">{safeStringifyModal(value)}</span>
               </div>
             );
           }
@@ -206,19 +209,21 @@ function ViewDetailsModal({
   // Helper function to render array data in a user-friendly way
   function renderArrayData(data: any[], title: string): React.ReactNode {
     if (!Array.isArray(data) || data.length === 0) {
-      return <div className="text-gray-500">No items available</div>;
+      return <div className="text-gray-500 text-center py-4">No items available</div>;
     }
 
     return (
       <div className="space-y-4">
         {data.map((item, index) => (
-          <div key={index} className="border border-gray-200 rounded-lg p-4 bg-white">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              <span className="font-medium text-gray-700">Item {index + 1}</span>
+          <div key={index} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-6 h-6 bg-[#2e7d32] rounded-full flex items-center justify-center">
+                <span className="text-white text-xs font-bold">{index + 1}</span>
+              </div>
+              <span className="font-semibold text-gray-800">Item {index + 1}</span>
             </div>
             {typeof item === 'object' && item !== null ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {Object.entries(item).map(([key, value]) => {
                   if (key === '_id' || key === '__v') return null;
                   const displayKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
@@ -226,16 +231,19 @@ function ViewDetailsModal({
                   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                     // Nested object in array item
                     return (
-                      <div key={key} className="border border-gray-100 rounded p-2 bg-gray-50">
-                        <div className="font-medium text-gray-600 mb-1">{displayKey}</div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-sm">
+                      <div key={key} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                        <div className="font-medium text-gray-700 mb-2 flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 bg-[#2e7d32] rounded-full"></div>
+                          {displayKey}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                           {Object.entries(value).map(([nestedKey, nestedValue]) => {
                             if (nestedKey === '_id' || nestedKey === '__v') return null;
                             const nestedDisplayKey = nestedKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
                             return (
-                              <div key={nestedKey} className="flex justify-between">
-                                <span className="text-gray-500">{nestedDisplayKey}:</span>
-                                <span className="font-medium">{safeStringifyModal(nestedValue)}</span>
+                              <div key={nestedKey} className="flex justify-between items-center py-2 px-3 bg-white rounded border border-gray-100">
+                                <span className="text-gray-600 font-medium">{nestedDisplayKey}:</span>
+                                <span className="font-semibold text-gray-900">{safeStringifyModal(nestedValue)}</span>
                               </div>
                             );
                           })}
@@ -245,16 +253,18 @@ function ViewDetailsModal({
                   } else {
                     // Simple value in array item
                     return (
-                      <div key={key} className="flex justify-between items-center py-1">
-                        <span className="text-gray-600">{displayKey}</span>
-                        <span className="font-medium">{safeStringifyModal(value)}</span>
+                      <div key={key} className="flex justify-between items-center py-2 px-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <span className="text-gray-600 font-medium">{displayKey}:</span>
+                        <span className="font-semibold text-gray-900">{safeStringifyModal(value)}</span>
                       </div>
                     );
                   }
                 })}
               </div>
             ) : (
-              <div className="text-gray-700">{safeStringifyModal(item)}</div>
+              <div className="text-gray-800 font-medium bg-gray-50 rounded-lg p-3 border border-gray-200">
+                {safeStringifyModal(item)}
+              </div>
             )}
           </div>
         ))}
@@ -290,168 +300,196 @@ function ViewDetailsModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 px-6 py-6 bg-white">
-      {/* Header */}
-      <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-green-700 shadow-sm">
-        <h2 className="text-2xl font-semibold text-gray-900">Item Details</h2>
-        <button 
-          onClick={onClose} 
-          className="text-white hover:text-gray-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
-        >
-          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Content */}
-      <div className="p-8 overflow-y-auto h-[calc(100vh-120px)]">
-        {/* Status Information */}
-        {statusFields.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-2 h-8 bg-gradient-to-b from-indigo-500 to-purple-600 rounded-full"></div>
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm">
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl max-h-[95vh] overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-[#2e7d32] to-[#18281f] px-8 py-6">
+            <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-bold text-gray-900">Status Information</h3>
-                <p className="text-sm text-gray-600 mt-1">Current status and state information</p>
+                <h2 className="text-2xl font-bold text-white">Item Details</h2>
+                <p className="text-green-100 text-sm mt-1">Complete information overview</p>
               </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {statusFields.map(([key, value]) => (
-                <div key={key} className="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 rounded-xl p-6 border border-indigo-200 shadow-sm hover:shadow-md transition-all duration-300">
-                  <div className="text-sm font-semibold text-indigo-800 mb-3 flex items-center gap-2">
-                    <div className="w-3 h-3 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full"></div>
-                    {formatFieldName(key)}
-                  </div>
-                  <div className="text-base">
-                    {(() => {
-                      const statusData = formatStatusValue(value);
-                      return (
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusData.style.bg} ${statusData.style.text} ${statusData.style.border}`}>
-                          {statusData.style.icon && <span>{statusData.style.icon}</span>}
-                          {statusData.text}
-                        </span>
-                      );
-                    })()}
-                  </div>
-                </div>
-              ))}
+              <button 
+                onClick={onClose} 
+                className="text-white hover:text-green-200 transition-colors p-2 rounded-lg hover:bg-white/10"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
           </div>
-        )}
 
-        {/* Basic Information */}
-        {basicFields.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-1 h-6 bg-blue-500 rounded-full"></div>
-              <h3 className="text-lg font-semibold text-gray-800">Basic Information</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {basicFields.map(([key, value]) => (
-                <div key={key} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors duration-200">
-                  <div className="text-sm font-medium text-gray-600 mb-2 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    {formatFieldName(key)}
-                  </div>
-                  <div className="text-base text-gray-900">
-                    {formatValue(value)}
+          {/* Content */}
+          <div className="p-8 overflow-y-auto max-h-[calc(95vh-140px)]">
+            {/* Status Information */}
+            {statusFields.length > 0 && (
+              <div className="mb-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-1 h-8 bg-[#2e7d32] rounded-full"></div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900">Status Information</h3>
+                    <p className="text-sm text-gray-600 mt-1">Current status and state information</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Date Information */}
-        {dateFields.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-1 h-6 bg-green-500 rounded-full"></div>
-              <h3 className="text-lg font-semibold text-gray-800">Date Information</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {dateFields.map(([key, value]) => (
-                <div key={key} className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 border border-green-100 hover:bg-green-100 transition-colors duration-200">
-                  <div className="text-sm font-medium text-green-700 mb-2 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    {formatFieldName(key)}
-                  </div>
-                  <div className="text-base text-green-900 font-medium">
-                    {formatValue(value)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Object Data */}
-        {objectFields.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-1 h-6 bg-purple-500 rounded-full"></div>
-              <h3 className="text-lg font-semibold text-gray-800">Additional Data</h3>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {objectFields.map(([key, value]) => (
-                <div key={key} className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-4 border border-purple-100 hover:bg-purple-100 transition-colors duration-200">
-                  <div className="text-sm font-medium text-purple-700 mb-3 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                    {formatFieldName(key)}
-                  </div>
-                  <div className="bg-white rounded border border-purple-200 p-3 shadow-sm max-h-64 overflow-y-auto">
-                    {renderNestedData(value, key)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Array Data */}
-        {arrayFields.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-1 h-6 bg-orange-500 rounded-full"></div>
-              <h3 className="text-lg font-semibold text-gray-800">List Items</h3>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {arrayFields.map(([key, value]) => (
-                <div key={key} className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-lg p-4 border border-orange-100 hover:bg-orange-100 transition-colors duration-200">
-                  <div className="text-sm font-medium text-orange-700 mb-3 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                    {formatFieldName(key)} ({Array.isArray(value) ? value.length : 0} items)
-                  </div>
-                  {Array.isArray(value) && value.length > 0 && (
-                    <div className="bg-white rounded border border-orange-200 p-3 shadow-sm max-h-64 overflow-y-auto">
-                      {renderArrayData(value, key)}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {statusFields.map(([key, value]) => (
+                    <div key={key} className="bg-gray-50 rounded-xl p-6 border border-gray-200 hover:shadow-md transition-all duration-200">
+                      <div className="text-sm font-medium text-gray-600 mb-3 flex items-center gap-2">
+                        <div className="w-2 h-2 bg-[#2e7d32] rounded-full"></div>
+                        {formatFieldName(key)}
+                      </div>
+                      <div className="text-base">
+                        {(() => {
+                          const statusData = formatStatusValue(value);
+                          return (
+                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${statusData.style.bg} ${statusData.style.text} ${statusData.style.border}`}>
+                              {statusData.style.icon && <span>{statusData.style.icon}</span>}
+                              {statusData.text}
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </div>
-                  )}
+                  ))}
                 </div>
-              ))}
+              </div>
+            )}
+
+            {/* Basic Information */}
+            {basicFields.length > 0 && (
+              <div className="mb-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-1 h-8 bg-gray-600 rounded-full"></div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900">Basic Information</h3>
+                    <p className="text-sm text-gray-600 mt-1">Primary data and details</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {basicFields.map(([key, value]) => (
+                    <div key={key} className="bg-gray-50 rounded-xl p-6 border border-gray-200 hover:shadow-md transition-all duration-200">
+                      <div className="text-sm font-medium text-gray-600 mb-3 flex items-center gap-2">
+                        <div className="w-2 h-2 bg-gray-600 rounded-full"></div>
+                        {formatFieldName(key)}
+                      </div>
+                      <div className="text-base text-gray-900 font-medium">
+                        {formatValue(value)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Date Information */}
+            {dateFields.length > 0 && (
+              <div className="mb-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-1 h-8 bg-[#2e7d32] rounded-full"></div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900">Date Information</h3>
+                    <p className="text-sm text-gray-600 mt-1">Timeline and date-related data</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {dateFields.map(([key, value]) => (
+                    <div key={key} className="bg-green-50 rounded-xl p-6 border border-green-200 hover:shadow-md transition-all duration-200">
+                      <div className="text-sm font-medium text-green-700 mb-3 flex items-center gap-2">
+                        <div className="w-2 h-2 bg-[#2e7d32] rounded-full"></div>
+                        {formatFieldName(key)}
+                      </div>
+                      <div className="text-base text-green-900 font-medium">
+                        {formatValue(value)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Object Data */}
+            {objectFields.length > 0 && (
+              <div className="mb-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-1 h-8 bg-gray-700 rounded-full"></div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900">Additional Data</h3>
+                    <p className="text-sm text-gray-600 mt-1">Extended information and details</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {objectFields.map(([key, value]) => (
+                    <div key={key} className="bg-gray-50 rounded-xl p-6 border border-gray-200 hover:shadow-md transition-all duration-200">
+                      <div className="text-sm font-medium text-gray-700 mb-4 flex items-center gap-2">
+                        <div className="w-2 h-2 bg-gray-700 rounded-full"></div>
+                        {formatFieldName(key)}
+                      </div>
+                      <div className="bg-white rounded-lg border border-gray-200 p-4 max-h-64 overflow-y-auto">
+                        {renderNestedData(value, key)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Array Data */}
+            {arrayFields.length > 0 && (
+              <div className="mb-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-1 h-8 bg-[#2e7d32] rounded-full"></div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900">List Items</h3>
+                    <p className="text-sm text-gray-600 mt-1">Collection of related items</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {arrayFields.map(([key, value]) => (
+                    <div key={key} className="bg-green-50 rounded-xl p-6 border border-green-200 hover:shadow-md transition-all duration-200">
+                      <div className="text-sm font-medium text-green-700 mb-4 flex items-center gap-2">
+                        <div className="w-2 h-2 bg-[#2e7d32] rounded-full"></div>
+                        {formatFieldName(key)} ({Array.isArray(value) ? value.length : 0} items)
+                      </div>
+                      {Array.isArray(value) && value.length > 0 && (
+                        <div className="bg-white rounded-lg border border-green-200 p-4 max-h-64 overflow-y-auto">
+                          {renderArrayData(value, key)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* No data message */}
+            {statusFields.length === 0 && basicFields.length === 0 && dateFields.length === 0 && 
+             objectFields.length === 0 && arrayFields.length === 0 && (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div className="text-gray-500 text-lg font-medium">No details available</div>
+                <div className="text-gray-400 text-sm mt-1">This item doesn't have any additional information</div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="bg-gray-50 px-8 py-4 border-t border-gray-200">
+            <div className="flex justify-end">
+              <Button 
+                onClick={onClose}
+                className="bg-[#2e7d32] hover:bg-[#18281f] text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200"
+              >
+                Close
+              </Button>
             </div>
           </div>
-        )}
-
-        {/* No data message */}
-        {statusFields.length === 0 && basicFields.length === 0 && dateFields.length === 0 && 
-         objectFields.length === 0 && arrayFields.length === 0 && (
-          <div className="text-center py-8">
-            <div className="text-gray-400 text-lg">No details available</div>
-          </div>
-        )}
-      </div>
-
-      {/* Footer */}
-      <div className="flex justify-end p-6 border-t border-gray-200 bg-white shadow-sm">
-        <Button 
-          onClick={onClose}
-          variant="outline"
-          className="px-6"
-        >
-          Close
-        </Button>
+        </div>
       </div>
     </div>
   );
