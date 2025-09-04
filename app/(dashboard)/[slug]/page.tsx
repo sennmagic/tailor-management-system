@@ -17,63 +17,6 @@ import { useLookup } from "@/lib/hooks/useLookup";
 import Link from "next/link";
 
 
-function analyzeBFS(obj: any): { keys: string[], type: string } | null {
-  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
-
-  const queue = [obj];
-  const visited = new Set();
-
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current || visited.has(current)) continue;
-    visited.add(current);
-
-    const keys = Object.keys(current).filter(
-      (k) => k !== "_id" && k !== "__v" && k !== "createdAt" && k !== "updatedAt"
-    );
-
-    // ✅ Dynamic value-unit (any numeric + unit-like key)
-    const numericKey = keys.find(
-      (k) => typeof current[k] === "number" || !isNaN(Number(current[k]))
-    );
-    const unitKey = keys.find(
-      (k) =>
-        k.toLowerCase().includes("unit") ||
-        k.toLowerCase().includes("currency") ||
-        k.toLowerCase().includes("symbol")
-    );
-    if (numericKey && unitKey) {
-      return { keys: [numericKey, unitKey], type: "value-unit" };
-    }
-
-    // Dynamic name-code
-    const nameKey = keys.find((k) => k.toLowerCase().includes("name"));
-    const codeKey = keys.find(
-      (k) => k.toLowerCase().includes("code") || k.toLowerCase().includes("number")
-    );
-    if (nameKey && codeKey) {
-      return { keys: [nameKey, codeKey], type: "name-code" };
-    }
-
-    // Dynamic display name
-    const displayKey = keys.find((k) =>
-      ["name", "displayname", "title", "label"].some((d) => d === k.toLowerCase())
-    );
-    if (displayKey) {
-      return { keys: [displayKey], type: "display-name" };
-    }
-
-    // BFS nested objects
-    keys.forEach((key) => {
-      const value = current[key];
-      if (value && typeof value === "object" && !Array.isArray(value)) {
-        queue.push(value);
-      }
-    });
-  }
-
-  return null;
-}
 
 function renderObjectBFS(value: unknown): React.ReactNode {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -82,53 +25,56 @@ function renderObjectBFS(value: unknown): React.ReactNode {
   }
   
   const obj = value as Record<string, unknown>;
-  const pattern = analyzeBFS(obj);
+  const entries = Object.entries(obj).filter(([k, v]) => 
+    k !== '_id' && k !== '__v' && k !== 'createdAt' && k !== 'updatedAt' && 
+    v !== null && v !== undefined && v !== ''
+  );
   
-  if (!pattern) {
-    const entries = Object.entries(obj).filter(([k, v]) => 
-      k !== '_id' && k !== '__v' && v !== null && v !== undefined && v !== ''
-    );
-    
-    if (entries.length === 0) return <span className="text-gray-400">No data</span>;
-    if (entries.length <= 2) {
-      return (
-        <div className="text-sm">
-          {entries.map(([k, v]) => (
-            <div key={k} className="flex items-center gap-1">
-              <span className="text-gray-600 text-xs">{k}:</span>
-              <span className="font-medium">{String(v)}</span>
-            </div>
-          ))}
-        </div>
-      );
+  if (entries.length === 0) return <span className="text-gray-400">No data</span>;
+  
+  // Helper function to safely convert value to string
+  const safeStringify = (val: unknown): string => {
+    if (val === null || val === undefined) return '-';
+    if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+      return String(val);
     }
-    return <span className="text-gray-400">Object</span>;
+    if (typeof val === 'object' && !Array.isArray(val)) {
+      const nestedObj = val as Record<string, unknown>;
+      const nestedKeys = Object.keys(nestedObj).filter(k => k !== '_id' && k !== '__v');
+      if (nestedKeys.length > 0) {
+        return safeStringify(nestedObj[nestedKeys[0]]);
+      }
+      return 'Object';
+    }
+    if (Array.isArray(val)) {
+      if (val.length === 0) return 'Empty Array';
+      if (val.length === 1) {
+        // For single item arrays, show the item content
+        return safeStringify(val[0]);
+      }
+      // For multiple items, show first item with count
+      return `${safeStringify(val[0])} (+${val.length - 1} more)`;
+    }
+    return String(val);
+  };
+  
+  // If only 1-2 entries, show them in a compact format
+  if (entries.length <= 2) {
+    return (
+      <div className="text-sm">
+        {entries.map(([k, v]) => (
+          <div key={k} className="flex items-center gap-1">
+            <span className="text-gray-600 text-xs">{k}:</span>
+            <span className="font-medium">{safeStringify(v)}</span>
+          </div>
+        ))}
+      </div>
+    );
   }
   
-  switch (pattern.type) {
-    case 'value-unit':
-      const val = obj[pattern.keys[0]];
-      const unit = obj[pattern.keys[1]];
-      return val !== null && val !== undefined && unit ? (
-        <span className="flex items-center gap-1">
-          <span className="font-medium">{String(val)}</span>
-          <span className="text-gray-500 text-xs">{String(unit)}</span>
-        </span>
-      ) : <span className="text-gray-400">-</span>;
-    
-    case 'name-code':
-      const parts = pattern.keys.map(key => obj[key]).filter(Boolean);
-      return parts.length > 0 ? (
-        <span>{parts.join(' - ')}</span>
-      ) : <span className="text-gray-400">-</span>;
-    
-    case 'display-name':
-      const displayValue = obj[pattern.keys[0]];
-      return displayValue ? <span>{String(displayValue)}</span> : <span className="text-gray-400">-</span>;
-    
-    default:
-      return <span className="text-gray-400">Object</span>;
-  }
+  // For more entries, show the first meaningful value
+  const [firstKey, firstValue] = entries[0];
+  return <span title={firstKey} className="text-sm">{safeStringify(firstValue)}</span>;
 }
 
 
@@ -178,6 +124,32 @@ function ViewDetailsModal({
   } = useLookup();
 
  
+  // Helper function to safely convert value to string for modal display
+  const safeStringifyModal = (val: unknown): string => {
+    if (val === null || val === undefined) return '-';
+    if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+      return String(val);
+    }
+    if (typeof val === 'object' && !Array.isArray(val)) {
+      const obj = val as Record<string, unknown>;
+      const keys = Object.keys(obj).filter(k => k !== '_id' && k !== '__v' && k !== 'createdAt' && k !== 'updatedAt');
+      if (keys.length > 0) {
+        const firstKey = keys[0];
+        const firstValue = obj[firstKey];
+        return `${firstKey}: ${safeStringifyModal(firstValue)}`;
+      }
+      return 'Object';
+    }
+    if (Array.isArray(val)) {
+      if (val.length === 0) return 'Empty Array';
+      if (val.length === 1) {
+        return safeStringifyModal(val[0]);
+      }
+      return `${safeStringifyModal(val[0])} (+${val.length - 1} more)`;
+    }
+    return String(val);
+  };
+
   function renderNestedData(data: any, title: string): React.ReactNode {
     if (!data || typeof data !== 'object') {
       return <div className="text-gray-500">No data available</div>;
@@ -210,7 +182,7 @@ function ViewDetailsModal({
                     return (
                       <div key={nestedKey} className="flex justify-between">
                         <span className="text-gray-600">{nestedDisplayKey}:</span>
-                        <span className="font-medium">{String(nestedValue)}</span>
+                        <span className="font-medium">{safeStringifyModal(nestedValue)}</span>
                       </div>
                     );
                   })}
@@ -222,7 +194,7 @@ function ViewDetailsModal({
             return (
               <div key={key} className="flex justify-between items-center py-2 border-b border-gray-100">
                 <span className="text-gray-600">{displayKey}</span>
-                <span className="font-medium">{String(value)}</span>
+                <span className="font-medium">{safeStringifyModal(value)}</span>
               </div>
             );
           }
@@ -263,7 +235,7 @@ function ViewDetailsModal({
                             return (
                               <div key={nestedKey} className="flex justify-between">
                                 <span className="text-gray-500">{nestedDisplayKey}:</span>
-                                <span className="font-medium">{String(nestedValue)}</span>
+                                <span className="font-medium">{safeStringifyModal(nestedValue)}</span>
                               </div>
                             );
                           })}
@@ -275,14 +247,14 @@ function ViewDetailsModal({
                     return (
                       <div key={key} className="flex justify-between items-center py-1">
                         <span className="text-gray-600">{displayKey}</span>
-                        <span className="font-medium">{String(value)}</span>
+                        <span className="font-medium">{safeStringifyModal(value)}</span>
                       </div>
                     );
                   }
                 })}
               </div>
             ) : (
-              <div className="text-gray-700">{String(item)}</div>
+              <div className="text-gray-700">{safeStringifyModal(item)}</div>
             )}
           </div>
         ))}
@@ -629,9 +601,60 @@ export default function SlugPage() {
       );
     }
     
-     if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-    return renderObjectBFS(value);
-  }
+    // Handle objects - show first key value instead of "Object"
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      const obj = value as Record<string, unknown>;
+      const keys = Object.keys(obj).filter(k => k !== '_id' && k !== '__v' && k !== 'createdAt' && k !== 'updatedAt');
+      
+      if (keys.length === 0) {
+        return <span className="text-gray-400">-</span>;
+      }
+      
+      // Get the first meaningful key and its value
+      const firstKey = keys[0];
+      const firstValue = obj[firstKey];
+      
+      // Helper function to safely convert value to string
+      const safeStringify = (val: unknown): string => {
+        if (val === null || val === undefined) return '-';
+        if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+          return String(val);
+        }
+        if (typeof val === 'object' && !Array.isArray(val)) {
+          // For nested objects, try to get the first meaningful value
+          const nestedObj = val as Record<string, unknown>;
+          const nestedKeys = Object.keys(nestedObj).filter(k => k !== '_id' && k !== '__v');
+          if (nestedKeys.length > 0) {
+            return safeStringify(nestedObj[nestedKeys[0]]);
+          }
+          return 'Object';
+        }
+        if (Array.isArray(val)) {
+          if (val.length === 0) return 'Empty Array';
+          if (val.length === 1) {
+            // For single item arrays, show the item content
+            return safeStringify(val[0]);
+          }
+          // For multiple items, show first item with count
+          return `${safeStringify(val[0])} (+${val.length - 1} more)`;
+        }
+        return String(val);
+      };
+      
+      // If the first value is also an object, try to get its first key
+      if (typeof firstValue === "object" && firstValue !== null && !Array.isArray(firstValue)) {
+        const nestedObj = firstValue as Record<string, unknown>;
+        const nestedKeys = Object.keys(nestedObj).filter(k => k !== '_id' && k !== '__v');
+        if (nestedKeys.length > 0) {
+          const nestedValue = nestedObj[nestedKeys[0]];
+          return <span title={`${firstKey}.${nestedKeys[0]}`}>{safeStringify(nestedValue)}</span>;
+        }
+      }
+      
+      // Return the first value with a tooltip showing the key
+      return <span title={firstKey}>{safeStringify(firstValue)}</span>;
+    }
+    
     if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
       return String(value);
     }
