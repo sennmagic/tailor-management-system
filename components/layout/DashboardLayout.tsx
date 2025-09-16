@@ -34,23 +34,80 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [sidebarData, setSidebarData] = useState<SidebarData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [isNavigating, setIsNavigating] = useState(false)
   const { unreadCount } = useNotifications()
   const router = useRouter()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const sidebarRef = useRef<HTMLDivElement>(null)
+  const navRef = useRef<HTMLElement>(null)
+  const mobileNavRef = useRef<HTMLElement>(null)
 
-  // Track navigation state - reset when pathname changes
+
+  // Auto-scroll to current active navigation item
   useEffect(() => {
-    if (isNavigating) {
-      const timer = setTimeout(() => {
-        setIsNavigating(false)
-      }, 800) // Reset after navigation completes
+    const scrollToActiveItem = () => {
+      const activeLink = document.querySelector('[data-nav-active="true"]')
+      const navContainer = navRef.current
       
+      if (activeLink && navContainer) {
+        const linkElement = activeLink as HTMLElement
+        const containerHeight = navContainer.clientHeight
+        const linkHeight = linkElement.clientHeight
+        const linkOffsetTop = linkElement.offsetTop
+        
+        // Calculate the ideal scroll position to center the link
+        const idealScrollTop = linkOffsetTop - (containerHeight / 2) + (linkHeight / 2)
+        
+        // Ensure we don't scroll past the boundaries
+        const maxScrollTop = navContainer.scrollHeight - containerHeight
+        const finalScrollTop = Math.max(0, Math.min(idealScrollTop, maxScrollTop))
+        
+        // Always scroll to ensure the active item is visible, even if it's at the bottom
+        navContainer.scrollTo({
+          top: finalScrollTop,
+          behavior: 'smooth'
+        })
+      }
+    }
+
+    // Small delay to ensure DOM is updated
+    const timer = setTimeout(scrollToActiveItem, 200)
+    return () => clearTimeout(timer)
+  }, [pathname])
+
+  // Auto-scroll to current active item when mobile menu opens
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      const scrollToActiveItem = () => {
+        const activeLink = document.querySelector('[data-nav-active="true"]')
+        const mobileNavContainer = mobileNavRef.current
+        
+        if (activeLink && mobileNavContainer) {
+          const linkElement = activeLink as HTMLElement
+          const containerHeight = mobileNavContainer.clientHeight
+          const linkHeight = linkElement.clientHeight
+          const linkOffsetTop = linkElement.offsetTop
+          
+          // Calculate the ideal scroll position to center the link
+          const idealScrollTop = linkOffsetTop - (containerHeight / 2) + (linkHeight / 2)
+          
+          // Ensure we don't scroll past the boundaries
+          const maxScrollTop = mobileNavContainer.scrollHeight - containerHeight
+          const finalScrollTop = Math.max(0, Math.min(idealScrollTop, maxScrollTop))
+          
+          // Scroll to center the active item in mobile sidebar
+          mobileNavContainer.scrollTo({
+            top: finalScrollTop,
+            behavior: 'smooth'
+          })
+        }
+      }
+
+      // Small delay to ensure mobile sidebar is rendered
+      const timer = setTimeout(scrollToActiveItem, 300)
       return () => clearTimeout(timer)
     }
-  }, [pathname, isNavigating])
+  }, [isMobileMenuOpen])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -230,7 +287,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             icon={getIcon(item, href)}
             onClick={() => {
               setIsMobileMenuOpen(false)
-              setIsNavigating(true)
             }}
           >
             {item.title}
@@ -245,52 +301,25 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     <>
       <div className="mb-8 px-1">
         <div className="flex items-center gap-3 mb-4">
-          <div className="relative overflow-hidden">
-            {/* Primary Logo - Default state */}
+          <div className="relative">
+            {/* Logo */}
             <img 
               src="/RPG-Logo-Green.png" 
               alt="Rastriya Poshak Ghar Logo" 
-              className={`h-10 w-auto drop-shadow-sm transition-all duration-500 ease-in-out ${
-                isNavigating ? 'opacity-0 transform scale-90 rotate-12' : 'opacity-100 transform scale-100 rotate-0'
-              }`}
-              style={{ position: isNavigating ? 'absolute' : 'relative' }}
+              className="h-10 w-auto drop-shadow-sm"
             />
-            
-            {/* Secondary Logo - Shows during navigation */}
-            <img 
-              src="/RPG-Logo-Golden.png" 
-              alt="Navigation Logo" 
-              className={`h-10 w-auto bg-[#ffffff] drop-shadow-sm  transition-all duration-500 ease-in-out ${
-                isNavigating ? 'opacity-100 transform scale-100 rotate-0' : 'opacity-0 transform scale-90 -rotate-12'
-              }`}
-              style={{ position: isNavigating ? 'relative' : 'absolute', top: isNavigating ? 0 : '100%' }}
-            />
-            
-            
           </div>
         </div>
        <div className="relative">
-  <p
-    className={`text-sm font-medium bg-clip-text text-transparent transition-all duration-300 ${
-      isNavigating
-        ? " bg-gradient-to-r from-[#FFD700] to-[#FFA500]  animate-pulse"
-        : "bg-gradient-to-r from-emerald-600 to-teal-600"
-    }`}
-  >
+  <p className="text-sm font-medium bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 to-teal-600">
     Tailor Management System
   </p>
 
-  <div
-    className={`absolute -bottom-1 left-0 h-0.5 rounded-full transition-all duration-300 ${
-      isNavigating
-        ? "w-45 bg-gradient-to-r from-[#FFD700] to-[#FFA500]  animate-pulse"
-        : "w-16 bg-gradient-to-r from-emerald-500 to-transparent"
-    }`}
-  ></div>
+  <div className="absolute -bottom-1 left-0 h-0.5 rounded-full w-16 bg-gradient-to-r from-emerald-500 to-transparent"></div>
 </div>
       </div>
 
-      <nav className="flex flex-col gap-1 text-sm overflow-y-auto max-h-[calc(100vh-220px)] scrollbar-hide">
+      <nav ref={navRef} className="flex flex-col gap-1 text-sm overflow-y-auto max-h-[calc(100vh-220px)] scrollbar-hide">
         {isLoading ? (
           <div className="space-y-3 px-1">
             <Skeleton className="w-full h-6 rounded-md" />
@@ -304,16 +333,69 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         ) : (
           <div className="space-y-4">
             <LinkSection title="Navigation">
-              <SidebarLink href="/" icon={<Home className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); setIsNavigating(true); }}>Dashboard</SidebarLink>
-              <SidebarLink href="/employees" icon={<Users className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); setIsNavigating(true); }}>Staff Management</SidebarLink>
-              <SidebarLink href="/customers" icon={<User className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); setIsNavigating(true); }}>Customers</SidebarLink>
-              <SidebarLink href="/appointments" icon={<Calendar className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); setIsNavigating(true); }}>Appointments</SidebarLink>
-              <SidebarLink href="/vendors" icon={<Truck className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); setIsNavigating(true); }}>Vendors</SidebarLink>
-              <SidebarLink href="/factories" icon={<Factory className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); setIsNavigating(true); }}>Factories</SidebarLink>
-              <SidebarLink href="/catalogs" icon={<Package className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); setIsNavigating(true); }}>Catalogs</SidebarLink>
-              <SidebarLink href="/orders" icon={<ShoppingCart className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); setIsNavigating(true); }}>Orders</SidebarLink>
-              <SidebarLink href="/invoices" icon={<FileText className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); setIsNavigating(true); }}>Invoices</SidebarLink>
-              <SidebarLink href="/expenses" icon={<DollarSign className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); setIsNavigating(true); }}>Expenses</SidebarLink>
+              <SidebarLink href="/" icon={<Home className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Dashboard</SidebarLink>
+              <SidebarLink href="/employees" icon={<Users className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Staff Management</SidebarLink>
+              <SidebarLink href="/customers" icon={<User className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Customers</SidebarLink>
+              <SidebarLink href="/appointments" icon={<Calendar className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Appointments</SidebarLink>
+              <SidebarLink href="/vendors" icon={<Truck className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Vendors</SidebarLink>
+              <SidebarLink href="/factories" icon={<Factory className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Factories</SidebarLink>
+              <SidebarLink href="/catalogs" icon={<Package className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Catalogs</SidebarLink>
+              <SidebarLink href="/orders" icon={<ShoppingCart className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Orders</SidebarLink>
+              <SidebarLink href="/invoices" icon={<FileText className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Invoices</SidebarLink>
+              <SidebarLink href="/expenses" icon={<DollarSign className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Expenses</SidebarLink>
+            </LinkSection>
+          </div>
+        )}
+      </nav>
+    </>
+  )
+
+  const MobileSidebarContent = () => (
+    <>
+      <div className="mb-8 px-1">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="relative">
+            {/* Logo */}
+            <img 
+              src="/RPG-Logo-Green.png" 
+              alt="Rastriya Poshak Ghar Logo" 
+              className="h-10 w-auto drop-shadow-sm"
+            />
+          </div>
+        </div>
+       <div className="relative">
+  <p className="text-sm font-medium bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 to-teal-600">
+    Tailor Management System
+  </p>
+
+  <div className="absolute -bottom-1 left-0 h-0.5 rounded-full w-16 bg-gradient-to-r from-emerald-500 to-transparent"></div>
+</div>
+      </div>
+
+      <nav ref={mobileNavRef} className="flex flex-col gap-1 text-sm overflow-y-auto max-h-[calc(100vh-220px)] scrollbar-hide">
+        {isLoading ? (
+          <div className="space-y-3 px-1">
+            <Skeleton className="w-full h-6 rounded-md" />
+            <Skeleton className="w-full h-10 rounded-lg" />
+            <Skeleton className="w-4/5 h-10 rounded-lg" />
+            <Skeleton className="w-full h-10 rounded-lg" />
+            <Skeleton className="w-3/4 h-10 rounded-lg" />
+          </div>
+        ) : sidebarData?.data ? (
+          renderMenuItems(sidebarData.data)
+        ) : (
+          <div className="space-y-4">
+            <LinkSection title="Navigation">
+              <SidebarLink href="/" icon={<Home className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Dashboard</SidebarLink>
+              <SidebarLink href="/employees" icon={<Users className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Staff Management</SidebarLink>
+              <SidebarLink href="/customers" icon={<User className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Customers</SidebarLink>
+              <SidebarLink href="/appointments" icon={<Calendar className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Appointments</SidebarLink>
+              <SidebarLink href="/vendors" icon={<Truck className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Vendors</SidebarLink>
+              <SidebarLink href="/factories" icon={<Factory className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Factories</SidebarLink>
+              <SidebarLink href="/catalogs" icon={<Package className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Catalogs</SidebarLink>
+              <SidebarLink href="/orders" icon={<ShoppingCart className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Orders</SidebarLink>
+              <SidebarLink href="/invoices" icon={<FileText className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Invoices</SidebarLink>
+              <SidebarLink href="/expenses" icon={<DollarSign className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Expenses</SidebarLink>
             </LinkSection>
           </div>
         )}
@@ -352,13 +434,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <span className="text-lg font-semibold text-slate-800">Menu</span>
           <button
             onClick={() => setIsMobileMenuOpen(false)}
-            className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+            className="p-2 rounded-lg hover:bg-slate-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
           >
             <X className="w-5 h-5 text-slate-600" />
           </button>
         </div>
         <div className="flex-1 px-6 py-6 overflow-hidden">
-          <SidebarContent />
+          <MobileSidebarContent />
         </div>
       </aside>
 
@@ -369,7 +451,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-4">
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="p-2 rounded-lg hover:bg-slate-100 transition-colors md:hidden"
+              className="p-2 rounded-lg hover:bg-slate-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer md:hidden"
             >
               <Menu className="w-5 h-5 text-slate-600" />
             </button>
@@ -402,7 +484,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             {/* User Avatar Dropdown */}
             <div className="relative" ref={dropdownRef}>
               <button
-                className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all duration-200"
+                className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all duration-200 cursor-pointer"
                 onClick={() => setDropdownOpen((open) => !open)}
                 aria-label="User menu"
               >
@@ -422,7 +504,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                     <p className="text-xs text-slate-500">Manage your profile</p>
                   </div>
                   <button
-                    className="w-full text-left px-4 py-3 hover:bg-red-50 text-sm text-red-600 font-medium transition-colors duration-200 flex items-center gap-2"
+                    className="w-full text-left px-4 py-3 hover:bg-red-50 hover:scale-[1.02] active:scale-[0.98] text-sm text-red-600 font-medium transition-all duration-200 flex items-center gap-2 cursor-pointer"
                     onClick={handleLogout}
                   >
                     <div className="w-2 h-2 rounded-full bg-red-500"></div>
@@ -452,6 +534,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <Link
         href={href}
         onClick={onClick}
+        data-nav-active={isActive}
         className={`group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium relative overflow-hidden ${
           isActive 
             ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/25 transform scale-[1.02]' 
