@@ -24,22 +24,10 @@ export function useAlert() {
   return ctx;
 }
 
-// Simple clean sounds
+// Sound effects disabled
 const playSound = (type: AlertVariant) => {
-  try {
-    const audio = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = audio.createOscillator();
-    const gain = audio.createGain();
-    
-    osc.connect(gain);
-    gain.connect(audio.destination);
-    
-    osc.frequency.value = type === 'success' ? 800 : type === 'warning' ? 600 : 400;
-    gain.gain.value = 0.05;
-    
-    osc.start();
-    setTimeout(() => osc.stop(), 100);
-  } catch {}
+  // Voice effects removed as requested
+  return;
 };
 
 // Smart message processing - keeps original errors, translates common patterns
@@ -129,75 +117,10 @@ const processMessage = (message: string, variant: AlertVariant): string => {
   return message;
 };
 
-// Better speech - more natural Nepali pronunciation
+// Speech synthesis disabled
 const speakInNepali = (text: string, variant: AlertVariant) => {
-  if (!window.speechSynthesis) return;
-  
-  window.speechSynthesis.cancel();
-  
-  const utterance = new SpeechSynthesisUtterance(text);
-  
-  // Slower, clearer speech settings for better Nepali pronunciation
-  utterance.rate = 0.6; // Much slower for clarity
-  utterance.pitch = variant === 'success' ? 1.1 : variant === 'destructive' ? 0.9 : 1.0;
-  utterance.volume = 0.8;
-  
-  // Wait for voices to load, then find best Nepali voice
-  const setVoice = () => {
-    const voices = window.speechSynthesis.getVoices();
-    
-    // Priority: Real Nepali → Hindi → English (India) → Any clear voice
-    const nepaliVoice = voices.find(voice => {
-      const name = voice.name.toLowerCase();
-      const lang = voice.lang.toLowerCase();
-      
-      // Look for actual Nepali voices first
-      if (lang.includes('ne-np') || name.includes('nepali')) return true;
-      
-      // Then Hindi voices which can handle Devanagari
-      if (lang.includes('hi-in') && name.includes('google')) return true;
-      
-      // English India voices are often clearer for mixed content
-      if (lang.includes('en-in') && name.includes('google')) return true;
-      
-      return false;
-    });
-    
-    // Fallback to clearest English voice
-    const clearVoice = voices.find(voice => 
-      voice.name.includes('Google UK English Female') ||
-      voice.name.includes('Microsoft Zira') ||
-      voice.name.includes('Alex')
-    );
-    
-    if (nepaliVoice) {
-      utterance.voice = nepaliVoice;
-      utterance.lang = nepaliVoice.lang;
-      // Even slower for non-native voices
-      if (!nepaliVoice.lang.includes('ne')) {
-        utterance.rate = 0.5;
-      }
-    } else if (clearVoice) {
-      utterance.voice = clearVoice;
-      utterance.rate = 0.5; // Very slow for English voices reading Nepali
-    }
-  };
-  
-  // Handle voices loading
-  if (window.speechSynthesis.getVoices().length > 0) {
-    setVoice();
-  } else {
-    window.speechSynthesis.onvoiceschanged = () => {
-      setVoice();
-      window.speechSynthesis.onvoiceschanged = null;
-    };
-  }
-  
-  // Add pauses for better pronunciation
-  const textWithPauses = text.replace(/[।,]/g, '। ');
-  utterance.text = textWithPauses;
-  
-  window.speechSynthesis.speak(utterance);
+  // Voice effects removed as requested
+  return;
 };
 
 export function AlertProvider({ children }: { children: ReactNode }) {
@@ -211,8 +134,8 @@ export function AlertProvider({ children }: { children: ReactNode }) {
   
   const showAlert = (config: string | AlertConfig, variant: AlertVariant = "destructive") => {
     const alertConfig = typeof config === 'string' 
-      ? { msg: config, variant, duration: 4000, sound: true, speech: true }
-      : { duration: 4000, sound: true, speech: true, ...config };
+      ? { msg: config, variant, duration: 4000, sound: false, speech: false }
+      : { duration: 4000, sound: false, speech: false, ...config };
     
     const processedMsg = processMessage(alertConfig.msg, alertConfig.variant);
     
