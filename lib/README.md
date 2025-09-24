@@ -275,7 +275,7 @@ function MyForm() {
 import { UtilityLogic } from '@/lib/utils';
 
 // Format currency
-const formatted = UtilityLogic.formatCurrency(1234.56); // "$1,234.56"
+const formatted = UtilityLogic.formatCurrency(1234.56); // "₹1,234.56"
 
 // Format dates
 const date = UtilityLogic.formatDate('2024-01-15'); // "Jan 15, 2024"

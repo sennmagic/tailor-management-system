@@ -118,7 +118,7 @@ function ViewDetailsModal({
     formatFieldName, 
     formatStatusValue, 
     formatValue,
-    shouldDisplayField, 
+    shouldDisplayFieldInView, 
     isStatusField, 
     isDateField 
   } = useLookup();
@@ -166,6 +166,12 @@ function ViewDetailsModal({
           if (key === '_id' || key === '__v' || key === 'createdAt' || key === 'updatedAt' || key === 'isDeleted') {
             return null; // Skip internal fields
           }
+          
+          // Skip password fields
+          const lowerKey = key.toLowerCase();
+          if (lowerKey.includes('password') || lowerKey.includes('pass') || lowerKey === 'pwd') {
+            return null;
+          }
 
           const displayKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
           
@@ -181,6 +187,9 @@ function ViewDetailsModal({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   {nestedEntries.map(([nestedKey, nestedValue]) => {
                     if (nestedKey === '_id' || nestedKey === '__v') return null;
+                    // Skip password fields
+                    const lowerNestedKey = nestedKey.toLowerCase();
+                    if (lowerNestedKey.includes('password') || lowerNestedKey.includes('pass') || lowerNestedKey === 'pwd') return null;
                     const nestedDisplayKey = nestedKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
                     return (
                       <div key={nestedKey} className="flex justify-between items-center py-2 px-3 bg-white rounded border border-gray-100">
@@ -226,6 +235,9 @@ function ViewDetailsModal({
               <div className="space-y-3">
                 {Object.entries(item).map(([key, value]) => {
                   if (key === '_id' || key === '__v') return null;
+                  // Skip password fields
+                  const lowerKey = key.toLowerCase();
+                  if (lowerKey.includes('password') || lowerKey.includes('pass') || lowerKey === 'pwd') return null;
                   const displayKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
                   
                   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
@@ -239,6 +251,9 @@ function ViewDetailsModal({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                           {Object.entries(value).map(([nestedKey, nestedValue]) => {
                             if (nestedKey === '_id' || nestedKey === '__v') return null;
+                            // Skip password fields
+                            const lowerNestedKey = nestedKey.toLowerCase();
+                            if (lowerNestedKey.includes('password') || lowerNestedKey.includes('pass') || lowerNestedKey === 'pwd') return null;
                             const nestedDisplayKey = nestedKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
                             return (
                               <div key={nestedKey} className="flex justify-between items-center py-2 px-3 bg-white rounded border border-gray-100">
@@ -284,7 +299,7 @@ function ViewDetailsModal({
   const arrayFields: [string, unknown][] = [];
 
   Object.entries(data).forEach(([fieldKey, value]) => {
-    if (!shouldDisplayField(fieldKey, value)) return;
+    if (!shouldDisplayFieldInView(fieldKey, value)) return;
     
     if (Array.isArray(value)) {
       arrayFields.push([fieldKey, value]);
@@ -603,6 +618,14 @@ export default function SlugPage() {
       return ["value"];
     }
     
+    // Filter out password fields from table display
+    const filterPasswordFields = (keyList: string[]) => {
+      return keyList.filter(key => {
+        const lowerKey = key.toLowerCase();
+        return !lowerKey.includes('password') && !lowerKey.includes('pass') && lowerKey !== 'pwd';
+      });
+    };
+    
     // For orders, ensure status fields are included and prioritized
     if (slug === 'orders' && apiResponse[0]) {
       const orderKeys = Object.keys(apiResponse[0]);
@@ -610,6 +633,9 @@ export default function SlugPage() {
       const nonStatusKeys = orderKeys.filter(key => !isStatusField(key)).slice(0, 3);
       keys = [...statusKeys, ...nonStatusKeys];
     }
+    
+    // Apply password field filtering
+    keys = filterPasswordFields(keys);
     
     return keys;
   }, [apiResponse, slug]);
@@ -982,7 +1008,19 @@ export default function SlugPage() {
                                 className="text-xs px-2 py-1 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 min-w-24"
                                 title={`Change ${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`}
                               >
-                                <option value="">Select Status</option>
+                                <option value="">{(() => {
+                                  const lower = key.toLowerCase();
+                                  if (lower.includes('gender')) return 'Select Gender';
+                                  if (lower.includes('role')) return 'Select Role';
+                                  if (lower.includes('status')) return 'Select Status';
+                                  if (lower.includes('category')) return 'Select Category';
+                                  if (lower.includes('specialization')) return 'Select Specialization';
+                                  if (lower.includes('type')) return 'Select Type';
+                                  if (lower.includes('state')) return 'Select State';
+                                  if (lower.includes('condition')) return 'Select Condition';
+                                  if (lower.includes('phase')) return 'Select Phase';
+                                  return 'Select Option';
+                                })()}</option>
                                 {getStatusOptions(key).map((status: string) => (
                                   <option key={status} value={status}>
                                     {status.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}

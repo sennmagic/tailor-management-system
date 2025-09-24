@@ -277,8 +277,8 @@ export const OrderTable = React.memo(function OrderTable({
   }, []);
 
   const formatPrice = useCallback((amount?: number) => {
-    if (!amount) return "$0";
-    return `$${amount.toFixed(2)}`;
+    if (!amount) return "₹0";
+    return `₹${amount.toFixed(2)}`;
   }, []);
 
   const getOrderItemsSummary = useCallback((items?: Array<{ itemType: string; itemName: string }>) => {

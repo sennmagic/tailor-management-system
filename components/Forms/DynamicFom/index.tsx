@@ -243,11 +243,55 @@ export function DynamicForm({
       }
 
       const commonInputProps = {
-        className: "h-12 w-full text-base",
+        className:
+          "h-11 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50",
         placeholder: `Enter ${formatFieldName(key).toLowerCase()}`
       };
 
       switch (fieldType.type) {
+        // Big description/notes fields
+        case 'text': {
+          const lowerKey = String(key).toLowerCase();
+          const isLongText =
+            lowerKey.includes('note') ||
+            lowerKey.includes('notes') ||
+            lowerKey.includes('description') ||
+            lowerKey.includes('remark') ||
+            lowerKey.includes('comments') ||
+            lowerKey.includes('comment') ||
+            lowerKey.includes('summary') ||
+            lowerKey.includes('details');
+
+          if (isLongText) {
+            return (
+              <div key={fieldPath} className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  {formatFieldName(key)}
+                  <span className="text-xs text-secondary ml-2">Description</span>
+                </label>
+                <textarea
+                  value={currentValue || ''}
+                  onChange={(e) => handleFieldChange(fieldPath, e.target.value)}
+                  className="w-full text-base rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 p-3 min-h-32 h-32 resize-y"
+                  placeholder={`Enter ${formatFieldName(key).toLowerCase()}`}
+                />
+              </div>
+            );
+          }
+          // fallthrough to default input for normal short text
+          return (
+            <div key={fieldPath} className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">{formatFieldName(key)}</label>
+              <Input
+                type="text"
+                value={currentValue || ''}
+                onChange={(e) => handleFieldChange(fieldPath, e.target.value)}
+                className={commonInputProps.className}
+                placeholder={commonInputProps.placeholder}
+              />
+            </div>
+          );
+        }
         case 'lookup':
           const options = lookupOptions[fieldPath] || [];
           const isLoadingLookup = !options.length && !lookupErrors[fieldPath];
@@ -289,13 +333,9 @@ export function DynamicForm({
                 className={`${commonInputProps.className} ${hasError ? 'border-red-500' : ''}`}
                 disabled={isLoadingLookup}
               >
-                <option value="">
-                  {isLoadingLookup ? 'Loading options...' : `Select ${formatFieldName(key)}`}
-                </option>
+                <option value="">{isLoadingLookup ? 'Loading options...' : `Select ${formatFieldName(key)}`}</option>
                 {options.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
+                  <option key={option.id} value={option.id}>{option.label}</option>
                 ))}
               </select>
               {hasError && (
@@ -325,6 +365,21 @@ export function DynamicForm({
           );
 
         case 'status':
+          // Generate dynamic placeholder based on field name
+          const getStatusPlaceholder = (fieldName: string): string => {
+            const lower = fieldName.toLowerCase();
+            if (lower.includes('gender')) return 'Select Gender';
+            if (lower.includes('role')) return 'Select Role';
+            if (lower.includes('status')) return 'Select Status';
+            if (lower.includes('category')) return 'Select Category';
+            if (lower.includes('specialization')) return 'Select Specialization';
+            if (lower.includes('type')) return 'Select Type';
+            if (lower.includes('state')) return 'Select State';
+            if (lower.includes('condition')) return 'Select Condition';
+            if (lower.includes('phase')) return 'Select Phase';
+            return 'Select Option';
+          };
+
           return (
             <div key={fieldPath} className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
@@ -336,7 +391,7 @@ export function DynamicForm({
                 onChange={(e) => handleFieldChange(fieldPath, e.target.value)}
                 className={commonInputProps.className}
               >
-                <option value="">Select Status</option>
+                <option value="">{getStatusPlaceholder(key)}</option>
                 {fieldType.config?.options.map((status: string) => (
                   <option key={status} value={status}>
                     {status.charAt(0).toUpperCase() + status.slice(1).replace(/-/g, ' ')}
@@ -347,17 +402,25 @@ export function DynamicForm({
           );
 
         case 'date':
+          // Get special date configuration
+          const isSpecialDate = fieldType.config?.isSpecialDate;
+          const dateType = fieldType.config?.dateType;
+          const customPlaceholder = fieldType.config?.placeholder;
+          
           return (
             <div key={fieldPath} className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
                 {formatFieldName(key)}
-                <span className="text-xs text-secondary ml-2">Date Field</span>
+                <span className="text-xs text-secondary ml-2">
+                  {isSpecialDate ? `${dateType?.charAt(0).toUpperCase() + dateType?.slice(1)} Field` : 'Date Field'}
+                </span>
               </label>
               <Input
                 type="date"
                 value={currentValue ? String(currentValue).split('T')[0] : ''}
                 onChange={(e) => handleFieldChange(fieldPath, e.target.value)}
                 className={commonInputProps.className}
+                placeholder={customPlaceholder || `Enter ${formatFieldName(key).toLowerCase()}`}
               />
             </div>
           );

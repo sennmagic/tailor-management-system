@@ -26,12 +26,15 @@ export interface UseLookupReturn {
   isDateField: (fieldName: string) => boolean;
   isMeasurementTypeField: (fieldName: string) => boolean;
   isFactoryField: (fieldName: string) => boolean;
+  isSpecialDateField: (fieldName: string) => boolean;
+  getSpecialDateInfo: (fieldName: string) => { type: string; placeholder: string };
   getStatusOptions: (fieldName: string) => string[];
   getStatusBadgeStyle: (status: string) => { bg: string; text: string; border: string; icon?: string };
   formatFieldName: (key: string) => string;
   formatStatusValue: (value: unknown) => { text: string; style: { bg: string; text: string; border: string; icon?: string } };
   formatValue: (value: unknown) => string;
   shouldDisplayField: (key: string, value: unknown) => boolean;
+  shouldDisplayFieldInView: (key: string, value: unknown) => boolean;
   extractDataArray: (data: unknown) => Array<Record<string, unknown>>;
   resetLookups: () => void;
   analyzeFormStructure: (obj: any, parentPath?: string) => void;
@@ -114,6 +117,7 @@ export function useLookup({
 
   // Separate function for the actual API call to avoid circular dependency
   const performLookupRequest = useCallback(async (fieldPath: string, config: any, retryCount: number) => {
+ 
     try {
       if (!config.endpoint) return;
       // Check if we already have options for this field using ref
@@ -178,7 +182,6 @@ export function useLookup({
           }
         }
         // Fallback to mock data if API fails
-        // (You can add fallback logic here if needed)
       }
       // Handle brand filtering for catalogs
       let endpoint = config.endpoint;
@@ -334,15 +337,16 @@ export function useLookup({
   }, []);
 
      // Enhanced field type detection based on JSON structure
-   const detectFieldType = useCallback((key: string, value: unknown, parentPath = ''): FieldType => {
-     const fullPath = parentPath ? `${parentPath}.${key}` : key;
-     const lowerKey = key.toLowerCase();
+  const detectFieldType = useCallback((key: string, value: unknown, parentPath = ''): FieldType => {
+    const fullPath = parentPath ? `${parentPath}.${key}` : key;
+    const lowerKey = key.toLowerCase();
+    const lowerParent = parentPath.toLowerCase();
      
 
     
     // Skip internal MongoDB fields
     if (key === '_id' || key === '__v' || key === 'createdAt' || key === 'updatedAt' || key === 'isDeleted') {
-      return { type: 'text' };
+      return { type: 'boolean' };
     }
 
     // Array detection
@@ -446,6 +450,17 @@ export function useLookup({
       };
     }
 
+    // Special Dates within arrays (e.g., specialDates[].label)
+    if ((lowerParent.includes('specialdate') || lowerParent.includes('special_dates') || lowerParent.includes('specialdates') || lowerParent.includes('occasion')) &&
+        (lowerKey === 'label' || lowerKey.includes('type'))) {
+      return {
+        type: 'status',
+        config: {
+          options: ['Birthday', 'Anniversary', 'Other']
+        }
+      };
+    }
+
     // Boolean detection
     if (typeof value === 'boolean') {
       return { type: 'boolean' };
@@ -497,6 +512,30 @@ export function useLookup({
     // Date field detection
     if (lowerKey.includes('date') || lowerKey === 'dob' || 
         (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value as string))) {
+      
+      // Special date field detection for birthdays and anniversaries
+      if (lowerKey.includes('birthday') || lowerKey.includes('birth') || lowerKey === 'dob') {
+        return { 
+          type: 'date',
+          config: {
+            isSpecialDate: true,
+            dateType: 'birthday',
+            placeholder: 'Select Birthday'
+          }
+        };
+      }
+      
+      if (lowerKey.includes('anniversary') || lowerKey.includes('anniv')) {
+        return { 
+          type: 'date',
+          config: {
+            isSpecialDate: true,
+            dateType: 'anniversary',
+            placeholder: 'Select Anniversary'
+          }
+        };
+      }
+      
       return { type: 'date' };
     }
 
@@ -506,7 +545,16 @@ export function useLookup({
       lowerKey.includes('condition') || 
       lowerKey.includes('phase') ||
       lowerKey.includes('specialization')||
-      lowerKey.includes('category')  ) 
+      lowerKey.includes('category') ||
+      lowerKey.includes('gender') ||
+      lowerKey.includes('role') ||
+      lowerKey.includes('channel') ||
+      lowerKey.includes('specialdate') ||
+      (lowerKey.includes('special') && lowerKey.includes('date')) ||
+      lowerKey.includes('occasion') ||
+      lowerKey.includes('eventtype') ||
+      lowerKey.includes('date_type') ||
+      lowerKey.includes('datetype')  ) 
           {
       return { 
         type: 'status',
@@ -591,7 +639,9 @@ export function useLookup({
   // Check if field is a date field
   const isDateField = useCallback((fieldName: string): boolean => {
     const lower = fieldName.toLowerCase();
-    return lower === 'dob' || lower === 'date' || lower.includes('date') || lower.includes('time');
+    return lower === 'dob' || lower === 'date' || lower.includes('date') || lower.includes('time') ||
+           lower.includes('birthday') || lower.includes('birth') || 
+           lower.includes('anniversary') || lower.includes('anniv');
   }, []);
 
   // Check if field is a measurement type field
@@ -601,6 +651,28 @@ export function useLookup({
            lower === 'measurement_type' || 
            lower === 'measurementtype' ||
            (lower.includes('measurement') && lower.includes('type'));
+  }, []);
+
+  // Check if field is a special date field (birthday, anniversary)
+  const isSpecialDateField = useCallback((fieldName: string): boolean => {
+    const lower = fieldName.toLowerCase();
+    return lower.includes('birthday') || lower.includes('birth') || lower === 'dob' ||
+           lower.includes('anniversary') || lower.includes('anniv');
+  }, []);
+
+  // Get special date field type and placeholder
+  const getSpecialDateInfo = useCallback((fieldName: string): { type: string; placeholder: string } => {
+    const lower = fieldName.toLowerCase();
+    
+    if (lower.includes('birthday') || lower.includes('birth') || lower === 'dob') {
+      return { type: 'birthday', placeholder: 'Select Birthday' };
+    }
+    
+    if (lower.includes('anniversary') || lower.includes('anniv')) {
+      return { type: 'anniversary', placeholder: 'Select Anniversary' };
+    }
+    
+    return { type: 'date', placeholder: 'Select Date' };
   }, []);
 
   // Check if field is a factory field
@@ -694,17 +766,22 @@ export function useLookup({
     
     // Employee Gender
     if (lower.includes('gender')) {
-      return ['Male', 'Female', 'Others'];
+      return ['male', 'female'];
     }
     
     // Employee Role
     if (lower.includes('role')) {
-      return ['Tailor', 'Accountant', 'Admin', 'SuperAdmin', 'Data Entry Clerk', 'Receptionist'];
+      return ['Tailor', 'Accountant', 'Admin', 'SuperAdmin', 'Data Entry Clerk', 'Receptionist', 'Admin Tailor'];
     }
     
-    // Appointment Source
-    if (lower.includes('Booking Channel') && lower.includes('appointment')) {
-      return ['Call', 'WhatsApp', 'Walk-In', 'Website', 'e'];
+    // Booking Channel / Appointment Source
+    if (lower.includes('booking channel') || lower.includes('booking_channel') || lower.includes('channel')) {
+      return ['WhatsApp', 'Viber', 'Call', 'Walk-In', 'Website', 'Other'];
+    }
+
+    // Special Dates (Occasion / Date Type)
+    if (lower.includes('specialdate') || (lower.includes('special') && lower.includes('date')) || lower.includes('occasion') || lower.includes('eventtype') || lower.includes('date_type') || lower.includes('datetype')) {
+      return ['Birthday', 'Anniversary', 'Other'];
     }
     
     // Appointment Type
@@ -947,14 +1024,31 @@ if (keys.length > 2) {
   return String(value);
 }, []);
 
-  // Check if field should be displayed
+  // Check if field should be displayed in forms (includes password fields)
   const shouldDisplayField = useCallback((key: string, value: unknown): boolean => {
     const skipFields = ["_id", "__v", "createdAt", "updatedAt"];
     if (skipFields.includes(key)) return false;
     
     // Don't filter out null/undefined/empty values - show all fields for form input
-    return true;
+    return true;  
   }, []);
+
+  // Check if field should be displayed in view modal (excludes password fields)
+  const shouldDisplayFieldInView = useCallback((key: string, value: unknown): boolean => {
+    const skipFields = ["_id", "__v", "createdAt", "updatedAt"];
+    if (skipFields.includes(key)) return false;
+    
+    // Skip password fields in view modal for security
+    const lowerKey = key.toLowerCase();
+    if (lowerKey.includes('password') || lowerKey.includes('pass') || lowerKey === 'pwd') {
+      return false;
+    }
+    
+    return true;  
+  }, []);
+
+
+
 
   // Extract data array from various response formats
   const extractDataArray = useCallback((data: unknown): Array<Record<string, unknown>> => {
@@ -1091,12 +1185,15 @@ if (keys.length > 2) {
     isDateField,
     isMeasurementTypeField,
     isFactoryField,
+    isSpecialDateField,
+    getSpecialDateInfo,
     getStatusOptions,
     getStatusBadgeStyle,
     formatFieldName,
     formatStatusValue,
     formatValue,
     shouldDisplayField,
+    shouldDisplayFieldInView,
     extractDataArray,
     resetLookups,
     analyzeFormStructure,
