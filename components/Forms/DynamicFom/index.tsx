@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,6 +17,7 @@ export function DynamicForm({
     onCancel: () => void,
     isLoading?: boolean
   }) {
+    const searchParams = useSearchParams();
     const [formState, setFormState] = useState<Record<string, unknown>>(data || {});
     const [initialData, setInitialData] = useState<Record<string, unknown>>(data || {});
     const [currentStep, setCurrentStep] = useState(0);
@@ -40,7 +42,64 @@ export function DynamicForm({
         
         if (isNewForm) {
           setInitialData(data);
-          setFormState(data);
+          let newFormState = { ...data };
+          
+          // Get customer ID from sessionStorage or URL
+          const latestCustomerId = sessionStorage.getItem('latestCustomerId');
+          const storedCustomerId = sessionStorage.getItem('prefillCustomerId');
+          const urlCustomerId = searchParams.get('customerId');
+          const customerId = latestCustomerId || storedCustomerId || urlCustomerId;
+          
+          if (customerId) {
+              // Try to find customer-related fields and pre-fill them
+              const customerFields = [
+                'customerId', 'customer', 'customer_id', 'customerName', 
+                'customerName', 'clientId', 'client', 'client_id',
+                'customerRef', 'customerReference'
+              ];
+              
+              for (const field of customerFields) {
+                if (newFormState.hasOwnProperty(field)) {
+                  // Handle different field types
+                  if (typeof newFormState[field] === 'object' && newFormState[field] !== null) {
+                    // For object fields, set the _id
+                    newFormState[field] = { ...newFormState[field], _id: customerId };
+                  } else {
+                    // For string/primitive fields, set the value directly
+                    newFormState[field] = customerId;
+                  }
+                }
+              }
+              
+              // Also check for nested customer object patterns
+              if (newFormState.customer && typeof newFormState.customer === 'object') {
+                newFormState.customer = { ...newFormState.customer, _id: customerId };
+              }
+              
+              // Check for client object patterns
+              if (newFormState.client && typeof newFormState.client === 'object') {
+                newFormState.client = { ...newFormState.client, _id: customerId };
+              }
+              
+              // Additional fallback: look for any field that might be a customer reference
+              // This handles cases where the field name might not match our predefined list
+              Object.keys(newFormState).forEach(key => {
+                const lowerKey = key.toLowerCase();
+                if ((lowerKey.includes('customer') || lowerKey.includes('client')) && 
+                    !customerFields.includes(key)) {
+                  
+                  if (typeof newFormState[key] === 'string' && newFormState[key] === '') {
+                    newFormState[key] = customerId;
+                  } else if (typeof newFormState[key] === 'object' && newFormState[key] !== null) {
+                    // For object fields, ensure the _id is set
+                    newFormState[key] = { ...newFormState[key], _id: customerId };
+                  }
+                }
+              });
+            }
+            
+          // Update form state with the modified data
+          setFormState(newFormState);
           setCurrentStep(0); // Reset to first step for new form
         } else {
           setFormState(prev => {

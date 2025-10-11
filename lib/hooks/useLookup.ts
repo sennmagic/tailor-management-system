@@ -1029,11 +1029,10 @@ if (keys.length > 2) {
     const skipFields = ["_id", "__v", "createdAt", "updatedAt"];
     if (skipFields.includes(key)) return false;
     
-    // Don't filter out null/undefined/empty values - show all fields for form input
     return true;  
   }, []);
 
-  // Check if field should be displayed in view modal (excludes password fields)
+
   const shouldDisplayFieldInView = useCallback((key: string, value: unknown): boolean => {
     const skipFields = ["_id", "__v", "createdAt", "updatedAt"];
     if (skipFields.includes(key)) return false;
@@ -1216,7 +1215,7 @@ if (keys.length > 2) {
       }
       return "-";
     },
-// ...existing code...
+
 // ...existing code...
 filterSubmitFields: (values: Record<string, unknown>) => {
   function filter(obj: any, parentKey?: string): any {
@@ -1239,10 +1238,7 @@ filterSubmitFields: (values: Record<string, unknown>) => {
   }
   return filter(values);
 },
-// ...existing code...
-// ...existing code...
 
-// Remove the standalone filterSubmitFields function at the bottom
     getConsistentFormTemplate: (data: Array<Record<string, unknown>>) => {
       function mergeKeys(a: any, b: any): any {
         if (Array.isArray(a) && Array.isArray(b)) return [];

@@ -1,6 +1,6 @@
 "use client";
-import {  useState, useMemo } from "react";
-import { useParams } from "next/navigation";
+import {  useState, useMemo, useEffect } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { fetchAPI, useAPI, useAPIMutation } from "@/lib/apiService";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAlert } from "@/components/ui/alertProvider";
@@ -512,9 +512,10 @@ function ViewDetailsModal({
 
 export default function SlugPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   let slug = params.slug as string | undefined;
   if (Array.isArray(slug)) slug = slug[0];
-  const { showAlert } = useAlert();
+  const { showAlert, showCustomerSuccessPopup } = useAlert();
   const [viewIdx, setViewIdx] = useState<number | null>(null);
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [deleteIdx, setDeleteIdx] = useState<number | null>(null);
@@ -522,6 +523,30 @@ export default function SlugPage() {
   
   // Loading states for actions
   const [isAdding, setIsAdding] = useState(false);
+  
+  // Check for autoOpen parameter and open form automatically
+  useEffect(() => {
+    const autoOpen = searchParams.get('autoOpen');
+    const mode = searchParams.get('mode');
+    const customerId = searchParams.get('customerId');
+    
+    if (autoOpen === 'true' && mode === 'create') {
+      setAddOpen(true);
+      
+      // If customerId is provided, we can store it for pre-populating the form
+      if (customerId) {
+        // Store customerId in sessionStorage for the form to use
+        sessionStorage.setItem('prefillCustomerId', customerId);
+      }
+    }
+  }, [searchParams]);
+  
+  // Cleanup effect to remove stored customerId when form is closed
+  useEffect(() => {
+    if (!addOpen) {
+      sessionStorage.removeItem('prefillCustomerId');
+    }
+  }, [addOpen]);
   const [isDeleting, setIsDeleting] = useState<number | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<number | null>(null);
   const [invoicePreview, setInvoicePreview] = useState<{ url: string; customerId: string; statusData?: any } | null>(null);
@@ -555,8 +580,22 @@ export default function SlugPage() {
   const createMutation = useAPIMutation({
     endpoint: slug || '',
     method: 'POST',
-    onSuccess: () => {
-      showAlert("Created successfully!", "success");
+    onSuccess: (data) => {
+      // Check if this is customer creation - check slug and data fields
+      const isCustomerCreation = slug === 'customers' || 
+        slug === 'customer' || 
+        (data && (data.name || data.customerName || data.firstName || data.lastName));
+      
+      if (isCustomerCreation) {
+        // Store the latest customer ID for future use
+        const customerId = data?._id || data?.id;
+        if (customerId) {
+          sessionStorage.setItem('latestCustomerId', customerId);
+        }
+        showCustomerSuccessPopup(data);
+      } else {
+        showAlert("Created successfully!", "success");
+      }
       refetch();
     },
     onError: (error) => {
