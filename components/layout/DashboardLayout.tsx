@@ -243,11 +243,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     if (route === 'orders') return <ShoppingCart className="w-5 h-5" />
     if (route === 'invoices') return <FileText className="w-5 h-5" />
     if (route === 'vendors') return <Truck className="w-5 h-5" />
-    if (route === 'factories') return <Factory className="w-5 h-5" />
+    if (route === 'factories' || route === 'factory') return <Factory className="w-5 h-5" />
     if (route === 'catalogs') return <Package className="w-5 h-5" />
     if (route === 'expense') return <DollarSign className="w-5 h-5" />
     if (route === 'logistics') return <Truck className="w-5 h-5" />
-    if (route === 'privilege') return <Star className="w-5 h-5" />
+    if (route === 'privilege' || (route && route.includes('privilege')) || title.includes('privilege')) return <Star className="w-5 h-5" />
     if (route === 'sales') return <TrendingUp className="w-5 h-5" />
     
     // Title-based fallback icons
