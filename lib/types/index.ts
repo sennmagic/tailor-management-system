@@ -9,6 +9,44 @@ export interface APIResponse<T = any> {
   };
 }
 
+// Stronger API response types
+export interface PaginatedAPIResponse<T> {
+  data: T[];
+  meta: {
+    currentPage: number;
+    totalPages: number;
+    totalItems: number;
+    itemsPerPage: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
+  message?: string;
+  success?: boolean;
+}
+
+export interface LookupAPIResponse {
+  data: Array<{
+    _id: string;
+    name?: string;
+    title?: string;
+    label?: string;
+    displayName?: string;
+    [key: string]: any;
+  }>;
+  message?: string;
+  success?: boolean;
+}
+
+export interface StatusAPIResponse {
+  data: {
+    _id: string;
+    status: string;
+    [key: string]: any;
+  };
+  message?: string;
+  success?: boolean;
+}
+
 // User/Employee Types
 export interface Employee {
   id: string;

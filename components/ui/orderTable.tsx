@@ -15,7 +15,7 @@ import {
   Calendar,
   User,
   ShoppingBag,
-  DollarSign,
+  IndianRupee,
   Clock,
   CheckCircle,
   AlertCircle,
@@ -277,8 +277,8 @@ export const OrderTable = React.memo(function OrderTable({
   }, []);
 
   const formatPrice = useCallback((amount?: number) => {
-    if (!amount) return "$0";
-    return `$${amount.toFixed(2)}`;
+    if (!amount) return "Rs 0";
+    return `Rs ${amount.toFixed(2)}`;
   }, []);
 
   const getOrderItemsSummary = useCallback((items?: Array<{ itemType: string; itemName: string }>) => {
@@ -428,7 +428,7 @@ export const OrderTable = React.memo(function OrderTable({
                           </span>
                         </div>
                         <div className="flex items-center gap-1 text-gray-900 font-medium">
-                          <DollarSign className="w-3 h-3" />
+                          <IndianRupee className="w-3 h-3" />
                           <span className="text-sm">
                             {formatPrice(order.totalGrossAmount)}
                           </span>

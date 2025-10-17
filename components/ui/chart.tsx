@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, TrendingUp, Users, ShoppingCart, DollarSign, Calendar, Package, Truck, Factory, FileText, Filter, BarChart, LineChart, PieChart } from "lucide-react";
+import { BarChart3, TrendingUp, Users, ShoppingCart, IndianRupee, Calendar, Package, Truck, Factory, FileText, Filter, BarChart, LineChart, PieChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 

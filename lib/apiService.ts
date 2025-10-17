@@ -89,7 +89,10 @@ export const fetchAPI = async <TResponse = any, TData = unknown>({
   }
 
   try {
-    console.log('🌐 API Request:', { url, method, headers, data })
+    // Use production-safe logging
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🌐 API Request:', { url, method, headers, data });
+    }
     
     const controller = new AbortController()
     // Reduce timeout to 15 seconds for better UX
@@ -120,7 +123,8 @@ export const fetchAPI = async <TResponse = any, TData = unknown>({
     const json = await response.json();
     return { data: json, error: null };
   } catch (error: any) {
-    console.error('🌐 API Error:', error)
+    // Always log errors, even in production
+    console.error('🌐 API Error:', error);
     
     // Handle different types of network errors
     if (error.name === 'AbortError') {

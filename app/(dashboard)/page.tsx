@@ -8,7 +8,7 @@ import { StatisticsChart } from "@/components/ui/chart";
 import { 
   Users, 
   ShoppingBag, 
-  DollarSign, 
+  IndianRupee, 
   TrendingUp,
   Calendar,
   Package,
@@ -168,10 +168,10 @@ export default function Home() {
                 <div>
                   <p className="text-gray-600 text-sm font-medium">Average Order Value</p>
                                      <p className="text-2xl font-bold text-secondary mt-2">
-                     ${stats?.orders ? Math.round((stats.revenue / stats.orders)) : 0}
+                     Rs {stats?.orders ? Math.round((stats.revenue / stats.orders)) : 0}
                    </p>
                  </div>
-                 <DollarSign className="w-10 h-10 text-secondary" />
+                 <IndianRupee className="w-10 h-10 text-secondary" />
               </div>
             </CardContent>
           </Card>

@@ -3,7 +3,7 @@
 import { ReactNode, useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Search, Bell, Users, User, Calendar, Truck, Factory, Package, Ruler, DollarSign, ShoppingCart, FileText, Star, Home, Settings, Building, ShoppingBag, CreditCard, Clock, BarChart3, Layers, Database, Shield, Zap, TrendingUp, Menu, X, ChevronDown } from 'lucide-react'
+import { Search, Bell, Users, User, Calendar, Truck, Factory, Package, Ruler, IndianRupee, ShoppingCart, FileText, Star, Home, Settings, Building, ShoppingBag, CreditCard, Clock, BarChart3, Layers, Database, Shield, Zap, TrendingUp, Menu, X, ChevronDown } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -245,7 +245,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     if (route === 'vendors') return <Truck className="w-5 h-5" />
     if (route === 'factories' || route === 'factory') return <Factory className="w-5 h-5" />
     if (route === 'catalogs') return <Package className="w-5 h-5" />
-    if (route === 'expense') return <DollarSign className="w-5 h-5" />
+    if (route === 'expense') return <IndianRupee className="w-5 h-5" />
     if (route === 'logistics') return <Truck className="w-5 h-5" />
     if (route === 'privilege' || (route && route.includes('privilege')) || title.includes('privilege')) return <Star className="w-5 h-5" />
     if (route === 'sales') return <TrendingUp className="w-5 h-5" />
@@ -342,7 +342,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               <SidebarLink href="/catalogs" icon={<Package className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Catalogs</SidebarLink>
               <SidebarLink href="/orders" icon={<ShoppingCart className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Orders</SidebarLink>
               <SidebarLink href="/invoices" icon={<FileText className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Invoices</SidebarLink>
-              <SidebarLink href="/expenses" icon={<DollarSign className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Expenses</SidebarLink>
+              <SidebarLink href="/expenses" icon={<IndianRupee className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Expenses</SidebarLink>
             </LinkSection>
           </div>
         )}
@@ -395,7 +395,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               <SidebarLink href="/catalogs" icon={<Package className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Catalogs</SidebarLink>
               <SidebarLink href="/orders" icon={<ShoppingCart className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Orders</SidebarLink>
               <SidebarLink href="/invoices" icon={<FileText className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Invoices</SidebarLink>
-              <SidebarLink href="/expenses" icon={<DollarSign className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Expenses</SidebarLink>
+              <SidebarLink href="/expenses" icon={<IndianRupee className="w-5 h-5" />} onClick={() => { setIsMobileMenuOpen(false); }}>Expenses</SidebarLink>
             </LinkSection>
           </div>
         )}
