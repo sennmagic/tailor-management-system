@@ -218,7 +218,8 @@ export function OrderForm({
       factoryId: '',
       measurementId: '',
       orderItems: []
-    })
+    }),
+    selfEntityName: 'orders'
   })
 
   // Initialize form when order data is loaded (both create and edit modes)
@@ -468,7 +469,8 @@ export function OrderForm({
       const label = formatFieldName(fieldName)
       const placeholder = `Enter ${label.toLowerCase()}`
       
-      if (['_id', '__v', 'createdAt', 'updatedAt', 'isDeleted'].includes(fieldName)) {
+      const normalized = fieldName.toLowerCase().replace(/[^a-z]/g, '')
+      if (['_id', '__v', 'createdAt', 'updatedAt', 'isDeleted'].includes(fieldName) || normalized === 'orderid') {
         return null
       }
 
@@ -1126,7 +1128,8 @@ export function OrderForm({
         const fieldType = detectFieldType(fieldName, value)
         const lowerFieldName = fieldName.toLowerCase()
         
-        if (['_id', '__v', 'createdAt', 'updatedAt', 'isDeleted'].includes(fieldName)) {
+        const normalized = fieldName.toLowerCase().replace(/[^a-z]/g, '')
+        if (['_id', '__v', 'createdAt', 'updatedAt', 'isDeleted'].includes(fieldName) || normalized === 'orderid') {
           return
         }
         

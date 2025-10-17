@@ -1,6 +1,6 @@
 "use client";
-import {  useState, useMemo } from "react";
-import { useParams } from "next/navigation";
+import {  useState, useMemo, useEffect } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { fetchAPI, useAPI, useAPIMutation } from "@/lib/apiService";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAlert } from "@/components/ui/alertProvider";
@@ -12,6 +12,7 @@ import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbS
 import { DynamicForm } from "@/components/Forms/DynamicFom";
 import OrderFormWithErrorBoundary from "@/components/ui/orderForm";
 import { OrderTable } from "@/components/ui/orderTable";
+import DownloadButton from "@/components/ui/DownloadButton";
 import { useLookup } from "@/lib/hooks/useLookup";
 
 import Link from "next/link";
@@ -118,7 +119,7 @@ function ViewDetailsModal({
     formatFieldName, 
     formatStatusValue, 
     formatValue,
-    shouldDisplayField, 
+    shouldDisplayFieldInView: shouldDisplayField, 
     isStatusField, 
     isDateField 
   } = useLookup();
@@ -497,6 +498,8 @@ function ViewDetailsModal({
 
 export default function SlugPage() {
   const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   let slug = params.slug as string | undefined;
   if (Array.isArray(slug)) slug = slug[0];
   const { showAlert } = useAlert();
@@ -504,6 +507,7 @@ export default function SlugPage() {
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [deleteIdx, setDeleteIdx] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [postCreatePrompt, setPostCreatePrompt] = useState<null | { type: 'measurement' | 'order', id?: string }>(null);
   
   // Loading states for actions
   const [isAdding, setIsAdding] = useState(false);
@@ -528,7 +532,7 @@ export default function SlugPage() {
     renderCellValue,
     filterSubmitFields,
     getEmptyFormData
-  } = useLookup({ data: [] }); // Initialize with empty array
+  } = useLookup({ data: [], selfEntityName: slug }); // Initialize with empty array
 
   // Extract data array from API response
   const apiResponse = useMemo(() => {
@@ -543,6 +547,9 @@ export default function SlugPage() {
     onSuccess: () => {
       showAlert("Created successfully!", "success");
       refetch();
+      if (slug === 'measurements') {
+        setPostCreatePrompt({ type: 'measurement' });
+      }
     },
     onError: (error) => {
       showAlert(`Failed to create: ${error}`, "destructive");
@@ -596,22 +603,35 @@ export default function SlugPage() {
   const filteredOrders = useMemo(() => {
     return apiResponse;
   }, [apiResponse]);
+  // Auto open order form when /orders?open=1
+  useEffect(() => {
+    if (slug === 'orders') {
+      const shouldOpen = searchParams?.get('open') === '1';
+      if (shouldOpen && !addOpen) {
+        setAddOpen(true);
+      }
+    }
+    // Intentionally avoid adding searchParams to deps to prevent re-runs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, addOpen]);
+
 
   const allKeys = useMemo(() => {
-    let keys = apiResponse[0] ? Object.keys(apiResponse[0]).slice(0, 4) : [];
+    const filterOutIds = (arr: string[]) => arr.filter(k => k !== '_id' && k !== 'id');
+    let keys = apiResponse[0] ? filterOutIds(Object.keys(apiResponse[0])).slice(0, 4) : [];
     if (keys.length === 0 && apiResponse.length > 0) {
       return ["value"];
     }
     
     // For orders, ensure status fields are included and prioritized
     if (slug === 'orders' && apiResponse[0]) {
-      const orderKeys = Object.keys(apiResponse[0]);
+      const orderKeys = filterOutIds(Object.keys(apiResponse[0]));
       const statusKeys = orderKeys.filter(key => isStatusField(key));
       const nonStatusKeys = orderKeys.filter(key => !isStatusField(key)).slice(0, 3);
       keys = [...statusKeys, ...nonStatusKeys];
     }
     
-    return keys;
+    return filterOutIds(keys);
   }, [apiResponse, slug]);
 
 
@@ -874,7 +894,7 @@ export default function SlugPage() {
       {/* Show OrderForm when addOpen is true for orders */}
       {slug === 'orders' && addOpen && (
         <OrderFormWithErrorBoundary 
-          onSuccess={() => setAddOpen(false)}
+          onSuccess={() => { setAddOpen(false); setPostCreatePrompt({ type: 'order' }); }}
           onCancel={() => setAddOpen(false)}
           mode="create"
         />
@@ -1000,6 +1020,9 @@ export default function SlugPage() {
                       ))}
                       <TableCell>
                         <div className="flex gap-2">
+                          {slug === 'invoices' && (
+                            <DownloadButton id={String((row as any)?._id || '')} label="Download" />
+                          )}
                           <Button
                             onClick={() => setViewIdx(idx)}
                             title="View details"
@@ -1095,6 +1118,7 @@ export default function SlugPage() {
               }}
               onCancel={() => setEditIdx(null)}
               isLoading={patchMutation.isLoading}
+              currentEntity={slug}
             />
           )}
         </Modal>
@@ -1136,9 +1160,33 @@ export default function SlugPage() {
             }}
             onCancel={() => setAddOpen(false)}
             isLoading={isAdding}
+            currentEntity={slug}
           />
         </Modal>
       )}
+      {/* Post-create prompts */}
+      <Modal open={postCreatePrompt !== null} onClose={() => setPostCreatePrompt(null)}>
+        {postCreatePrompt?.type === 'measurement' && (
+          <div className="p-6 space-y-4">
+            <h3 className="text-lg font-semibold">Measurement created</h3>
+            <p className="text-gray-600">Proceed to create an order?</p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setPostCreatePrompt(null)}>Close</Button>
+              <Button onClick={() => { setPostCreatePrompt(null); router.push('/orders?open=1'); }}>Go to Orders</Button>
+            </div>
+          </div>
+        )}
+        {postCreatePrompt?.type === 'order' && (
+          <div className="p-6 space-y-4">
+            <h3 className="text-lg font-semibold">Order created successfully</h3>
+            <p className="text-gray-600">You can review and download the invoice from the invoices page.</p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setPostCreatePrompt(null)}>Stay</Button>
+              <Button onClick={() => { setPostCreatePrompt(null); router.push('/invoices'); }}>Go to Invoices</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
   
   
     </div>

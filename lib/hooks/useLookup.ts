@@ -15,6 +15,7 @@ export interface LookupOption {
 export interface UseLookupProps {
   data?: Record<string, unknown> | Array<Record<string, unknown>>;
   onLookupChange?: (lookupOptions: Record<string, LookupOption[]>) => void;
+  selfEntityName?: string;
 }
 
 export interface UseLookupReturn {
@@ -45,7 +46,8 @@ export interface UseLookupReturn {
 
 export function useLookup({ 
   data, 
-  onLookupChange 
+  onLookupChange,
+  selfEntityName
 }: UseLookupProps = {}): UseLookupReturn {
   const [lookupOptions, setLookupOptions] = useState<Record<string, LookupOption[]>>({});
   const [lookupErrors, setLookupErrors] = useState<Record<string, string>>({});
@@ -56,6 +58,21 @@ export function useLookup({
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
   const [requestCache, setRequestCache] = useState<Set<string>>(new Set());
   const [queueVersion, setQueueVersion] = useState(0); // Add this to trigger queue processing
+
+  // Determine current entity (singular) from prop or URL pathname
+  const currentEntity = (() => {
+    if (selfEntityName && typeof selfEntityName === 'string') {
+      return pluralize.singular(selfEntityName).toLowerCase();
+    }
+    if (typeof window !== 'undefined') {
+      const last = (window.location?.pathname || '')
+        .split('/')
+        .filter(Boolean)
+        .slice(-1)[0] || '';
+      return pluralize.singular(last).toLowerCase();
+    }
+    return '';
+  })();
 
   // Add request limiting - only allow 3 concurrent requests
   const MAX_CONCURRENT_REQUESTS = 3;
@@ -137,6 +154,39 @@ export function useLookup({
         setLookupOptions(prev => ({ ...prev, [fieldPath]: measurementTypeOptions }));
         return;
       }
+      // Special handling for singular factory endpoint
+      if (config.endpoint === 'factory' || (config.entityName && String(config.entityName).toLowerCase() === 'factory')) {
+        // Try 'factory' first
+        const tryEndpoints = ['factory', 'factories'];
+        for (const ep of tryEndpoints) {
+          try {
+            console.log('[Lookup] Factory fetch attempt:', ep);
+            const result = await fetchAPI({ endpoint: ep, method: 'GET', withAuth: true });
+            if (!result.error && result.data) {
+              const response = result.data;
+              const dataArray = Array.isArray(response)
+                ? response
+                : response?.factoryInfo || response?.factoriesInfo || response?.data || response?.items || response?.results || [];
+              const options = Array.isArray(dataArray) ? dataArray.map((item: any) => {
+                const id = item._id || item.id;
+                if (!id) return null;
+                // Prefer human name first for factory
+                const label = item.factoryName || item.name || item.title || item.label || item.displayName || item.factory_id || item.factoryId || `Factory ${id}`;
+                return { id: String(id), label: String(label) };
+              }).filter((o): o is LookupOption => o !== null) : [];
+              if (options.length > 0) {
+                setLookupOptions(prev => ({ ...prev, [fieldPath]: options }));
+                return;
+              }
+            }
+          } catch (e) {
+            // continue to next endpoint
+          }
+        }
+        // If reached here, set error
+        setLookupErrors(prev => ({ ...prev, [fieldPath]: 'Unable to load options' }));
+        return;
+      }
       // Special handling for factories - try API first, then fallback to mock data
       if (config.endpoint === 'factories' || config.isFactoryLookup) {
         let result = await fetchAPI({ 
@@ -185,6 +235,14 @@ export function useLookup({
       if (config.endpoint === 'catalogs' && config.brandFilter) {
         endpoint = `/catalogs`;
       }
+      // Debug: log endpoint and context before request
+      console.log('[Lookup] Requesting options:', {
+        fieldPath,
+        entityName: config.entityName,
+        rawEndpoint: config.endpoint,
+        resolvedEndpoint: endpoint,
+        retryCount
+      });
       // Try with authentication first, then without if it fails
       let result = await fetchAPI({ 
         endpoint: endpoint, 
@@ -204,9 +262,11 @@ export function useLookup({
         });
       }
       if (result.error) {
+        console.warn('[Lookup] Auth request failed', { fieldPath, resolvedEndpoint: endpoint, error: result.error });
         // Try without authentication as fallback
         if (retryCount === 0) {
           try {
+            console.log('[Lookup] Retrying without auth:', { fieldPath, resolvedEndpoint: endpoint });
             const fallbackResult = await fetchAPI({ 
               endpoint: endpoint, 
               method: 'GET',
@@ -258,6 +318,7 @@ export function useLookup({
           }
         }
         // Set error if all attempts fail
+        console.error('[Lookup] Final failure for endpoint', { fieldPath, resolvedEndpoint: endpoint, entityName: config.entityName });
         setLookupErrors(prev => ({ ...prev, [fieldPath]: 'Unable to load options' }));
         return;
       }
@@ -272,29 +333,40 @@ export function useLookup({
           const options = dataArray.map((item: any) => {
             const id = item._id || item.id;
             if (!id) return null;
+            const entity = (config.entityName || '').toLowerCase();
+            const snakeKey = `${entity}_id`;
+            const camelKey = `${entity}Id`;
             let label = '';
             
-            // Special handling for catalogs - use catalogName and codeNumber
-            if (config.endpoint === 'catalogs' || config.endpoint === 'catalog') {
-              const catalogName = item.catalogName || item.name;
-              const codeNumber = item.codeNumber || item.code || '';
-              if (catalogName) {
-                label = codeNumber ? `${catalogName} - ${codeNumber}` : catalogName;
+            const preferNameFirst = entity === 'factory' || entity === 'vendor' || entity === 'catalog';
+            if (preferNameFirst) {
+              const nameFields = entity === 'factory'
+                ? ['factoryName', 'name', 'title', 'label', 'displayName']
+                : entity === 'vendor'
+                ? ['vendorName', 'name', 'title', 'label', 'displayName']
+                : ['catalogName', 'name', 'title', 'label', 'displayName'];
+              for (const f of nameFields) {
+                if (item[f] && typeof item[f] === 'string') { label = item[f]; break; }
               }
-            } else {
-              // Generic handling for other entities
-              const displayFields = ['name', 'title', 'label', 'displayName'];
-              for (const field of displayFields) {
-                if (item[field] && typeof item[field] === 'string') {
-                  label = item[field];
-                  break;
+              // Catalog: append code if available
+              if (!label && (entity === 'catalog')) {
+                const catalogName = item.catalogName || item.name;
+                const codeNumber = item.codeNumber || item.code || '';
+                if (catalogName) label = codeNumber ? `${catalogName} - ${codeNumber}` : catalogName;
+              }
+            }
+            if (!label) {
+              // Fallback to id-style label or generic names
+              if (item[snakeKey]) label = String(item[snakeKey]);
+              else if (item[camelKey]) label = String(item[camelKey]);
+              else {
+                const displayFields = ['name', 'title', 'label', 'displayName'];
+                for (const field of displayFields) {
+                  if (item[field] && typeof item[field] === 'string') { label = item[field]; break; }
                 }
               }
             }
-            
-            if (!label) {
-              label = `${config.entityName} ${id}`;
-            }
+            if (!label) label = `${entity}_${id}`;
             return { id: String(id), label: String(label) };
           }).filter((item): item is LookupOption => item !== null);
           setLookupOptions(prev => ({ ...prev, [fieldPath]: options }));
@@ -337,6 +409,7 @@ export function useLookup({
    const detectFieldType = useCallback((key: string, value: unknown, parentPath = ''): FieldType => {
      const fullPath = parentPath ? `${parentPath}.${key}` : key;
      const lowerKey = key.toLowerCase();
+    const lowerParent = parentPath.toLowerCase();
      
 
     
@@ -421,8 +494,10 @@ export function useLookup({
           entityName = entityName.replace(/id$/, '');
         }
         
-        // Simple approach: add 's' to make plural
-        endpoint = pluralize(entityName.toLowerCase());
+        // Endpoint resolution with special cases
+        endpoint = entityName.toLowerCase() === 'factory'
+          ? 'factory'
+          : pluralize(entityName.toLowerCase());
         console.log('Pluralized endpoint:', endpoint); // Debug: show pluralized endpoint
         
         return {
@@ -516,22 +591,27 @@ export function useLookup({
       };
     }
 
-    // Lookup field detection (foreign key relationships) - only for known entities
-    if (lowerKey.endsWith('id') && lowerKey !== 'id' && !lowerKey.startsWith('_')) {
-      const entityName = key.replace(/Id$/i, '');
-      
-      // Simple approach: add 's' to make plural
-      const endpoint = pluralize(entityName.toLowerCase());
-     
-      return {
-        type: 'lookup',
-        config: {
-          endpoint,
-          displayField: 'name',
-          entityName,
-          fieldPath: fullPath // Store the full path for debugging
-        }
-      };
+    // Lookup field detection (foreign key relationships) - robust patterns
+    const idPattern = /^(.*?)(?:[\s_\-])?id$/i; // matches: customerId, customer_id, customer id
+    if (idPattern.test(key) && lowerKey !== 'id' && !lowerKey.startsWith('_')) {
+      const match = key.match(idPattern);
+      const inferredEntity = (match && match[1] ? match[1] : '').replace(/[^a-zA-Z]/g, '').toLowerCase();
+      // Prevent self-referential lookup at top-level
+      if (currentEntity && inferredEntity === currentEntity && parentPath === '') {
+        return { type: 'text' };
+      }
+      if (inferredEntity) {
+        const endpoint = inferredEntity === 'factory' ? 'factory' : pluralize(inferredEntity);
+        return {
+          type: 'lookup',
+          config: {
+            endpoint,
+            displayField: 'name',
+            entityName: inferredEntity,
+            fieldPath: fullPath
+          }
+        };
+      }
     }
 
     // Direct catalog field detection (not just catalogId)
@@ -952,7 +1032,13 @@ if (keys.length > 2) {
     const skipFields = ["_id", "__v", "createdAt", "updatedAt"];
     if (skipFields.includes(key)) return false;
     
-    // Don't filter out null/undefined/empty values - show all fields for form input
+    // Hide top-level self-referential ids like customerId, customer_id, customer id
+    if (currentEntity) {
+      const lower = key.toLowerCase();
+      const normalized = lower.replace(/[^a-z]/g, ''); // remove non-letters
+      const selfNormalized = `${currentEntity}id`;
+      if (normalized === selfNormalized) return false;
+    }
     return true;
   }, []);
 
@@ -1232,3 +1318,5 @@ filterSubmitFields: (values: Record<string, unknown>) => {
     }
   };
 }
+
+

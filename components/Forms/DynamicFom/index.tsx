@@ -4,17 +4,20 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { useLookup } from "@/lib/hooks/useLookup";
+import pluralize from 'pluralize';
 
 export function DynamicForm({ 
     data, 
     onSubmit, 
     onCancel, 
-    isLoading = false
+    isLoading = false,
+    currentEntity
   }: { 
     data: Record<string, unknown>, 
     onSubmit: (values: Record<string, unknown>) => void, 
     onCancel: () => void,
-    isLoading?: boolean
+    isLoading?: boolean,
+    currentEntity?: string
   }) {
     const [formState, setFormState] = useState<Record<string, unknown>>(data || {});
     const [initialData, setInitialData] = useState<Record<string, unknown>>(data || {});
@@ -31,7 +34,7 @@ export function DynamicForm({
       resetLookups,
       filterSubmitFields,
       getEmptyFormData,
-    } = useLookup({ data });
+    } = useLookup({ data, selfEntityName: currentEntity });
 
     // Update form state when data changes, but preserve user input
     useEffect(() => {
@@ -177,6 +180,13 @@ export function DynamicForm({
         const fieldType = detectFieldType(key, value, parentPath);
         
         if (fieldType.type === 'lookup') {
+          // Hide lookup fields that point to the same entity as the current page
+          if (currentEntity && fieldType.config?.entityName) {
+            const lookupEntityPlural = pluralize(String(fieldType.config.entityName).toLowerCase());
+            if (lookupEntityPlural === String(currentEntity).toLowerCase()) {
+              return;
+            }
+          }
           groups.lookup.push([key, value, fieldPath]);
         } else if (fieldType.type === 'status') {
           groups.status.push([key, value, fieldPath]);
@@ -249,6 +259,13 @@ export function DynamicForm({
 
       switch (fieldType.type) {
         case 'lookup':
+          // If this lookup points to the same entity as the current page, hide it
+          if (currentEntity && fieldType.config?.entityName) {
+            const lookupEntityPlural = pluralize(String(fieldType.config.entityName).toLowerCase());
+            if (lookupEntityPlural === String(currentEntity).toLowerCase()) {
+              return null;
+            }
+          }
           const options = lookupOptions[fieldPath] || [];
           const isLoadingLookup = !options.length && !lookupErrors[fieldPath];
           const hasError = lookupErrors[fieldPath];
@@ -842,7 +859,14 @@ export function DynamicForm({
                   
                   const lookupFields = currentStepData.fields.filter(([key, value, fieldPath]) => {
                     const fieldType = detectFieldType(key, value, fieldPath.split('.').slice(0, -1).join('.'));
-                    return fieldType.type === 'lookup';
+                    if (fieldType.type !== 'lookup') return false;
+                    if (currentEntity && fieldType.config?.entityName) {
+                      const lookupEntityPlural = pluralize(String(fieldType.config.entityName).toLowerCase().trim());
+                      if (lookupEntityPlural === String(currentEntity).toLowerCase().trim()) {
+                        return false; // hide same-entity lookup
+                      }
+                    }
+                    return true;
                   });
                   
                   const statusFields = currentStepData.fields.filter(([key, value, fieldPath]) => {

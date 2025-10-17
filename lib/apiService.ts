@@ -11,7 +11,7 @@ tokens?: {
   };
   userData?: any;
 }
-const API_BASE = "https://tmsapi.rastriyaposhakghar.com/api/v1";
+export const API_BASE = "https://tmsapi.rastriyaposhakghar.com/api/v1";
 
 
 interface FetchAPIOptions<T = unknown> {
