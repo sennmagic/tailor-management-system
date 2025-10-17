@@ -1,5 +1,5 @@
 "use client";
-import {  useState, useMemo, useEffect } from "react";
+import {  useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { fetchAPI, useAPI, useAPIMutation } from "@/lib/apiService";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -13,6 +13,8 @@ import { DynamicForm } from "@/components/Forms/DynamicFom";
 import OrderFormWithErrorBoundary from "@/components/ui/orderForm";
 import { OrderTable } from "@/components/ui/orderTable";
 import DownloadButton from "@/components/ui/DownloadButton";
+import Pagination from "@/components/ui/pagination";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useLookup } from "@/lib/hooks/useLookup";
 
 import Link from "next/link";
@@ -119,7 +121,7 @@ function ViewDetailsModal({
     formatFieldName, 
     formatStatusValue, 
     formatValue,
-    shouldDisplayFieldInView: shouldDisplayField, 
+    shouldDisplayField, 
     isStatusField, 
     isDateField 
   } = useLookup();
@@ -507,7 +509,9 @@ export default function SlugPage() {
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [deleteIdx, setDeleteIdx] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [postCreatePrompt, setPostCreatePrompt] = useState<null | { type: 'measurement' | 'order', id?: string }>(null);
+  const [postCreatePrompt, setPostCreatePrompt] = useState<null | { type: 'customer' | 'measurement' | 'order', id?: string }>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; idx?: number }>(() => ({ open: false }));
+  const hasAutoOpenedRef = useRef(false);
   
   // Loading states for actions
   const [isAdding, setIsAdding] = useState(false);
@@ -549,6 +553,8 @@ export default function SlugPage() {
       refetch();
       if (slug === 'measurements') {
         setPostCreatePrompt({ type: 'measurement' });
+      } else if (slug === 'customers') {
+        setPostCreatePrompt({ type: 'customer' });
       }
     },
     onError: (error) => {
@@ -603,11 +609,22 @@ export default function SlugPage() {
   const filteredOrders = useMemo(() => {
     return apiResponse;
   }, [apiResponse]);
+
+  // Client-side pagination for non-orders tables
+  const PAGE_SIZE = 7;
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE)), [filteredOrders.length]);
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredOrders.slice(start, start + PAGE_SIZE);
+  }, [filteredOrders, currentPage]);
+  useEffect(() => { setCurrentPage(1); }, [slug, filteredOrders.length]);
   // Auto open order form when /orders?open=1
   useEffect(() => {
     if (slug === 'orders') {
       const shouldOpen = searchParams?.get('open') === '1';
-      if (shouldOpen && !addOpen) {
+      if (shouldOpen && !addOpen && !hasAutoOpenedRef.current) {
+        hasAutoOpenedRef.current = true;
         setAddOpen(true);
       }
     }
@@ -894,8 +911,17 @@ export default function SlugPage() {
       {/* Show OrderForm when addOpen is true for orders */}
       {slug === 'orders' && addOpen && (
         <OrderFormWithErrorBoundary 
-          onSuccess={() => { setAddOpen(false); setPostCreatePrompt({ type: 'order' }); }}
-          onCancel={() => setAddOpen(false)}
+          onSuccess={() => { 
+            setAddOpen(false); 
+            setPostCreatePrompt({ type: 'order' }); 
+            // Clean query param after success
+            if (searchParams?.get('open') === '1') router.replace('/orders');
+          }}
+          onCancel={() => {
+            hasAutoOpenedRef.current = true; // prevent auto-reopen
+            setAddOpen(false);
+            if (searchParams?.get('open') === '1') router.replace('/orders');
+          }}
           mode="create"
         />
       )}
@@ -926,7 +952,7 @@ export default function SlugPage() {
               onDelete={(orderId) => {
                 const orderIndex = apiResponse.findIndex(item => item._id === orderId);
                 if (orderIndex !== -1) {
-                  handleDelete(orderIndex);
+                  setConfirmDelete({ open: true, idx: orderIndex });
                 }
               }}
               onStatusChange={(orderId, status, field) => {
@@ -955,7 +981,8 @@ export default function SlugPage() {
                No data found.
              </div>
            ) : (
-            <Table>
+           <>
+           <Table>
               <TableHeader>
                 <TableRow>
                   {allKeys.map((key) => (
@@ -975,9 +1002,11 @@ export default function SlugPage() {
                     <TableCell />
                   </TableRow>
                 ) : (
-                  filteredOrders.map((row, idx) => (
+                  paginatedRows.map((row, idx) => {
+                    const globalIdx = (currentPage - 1) * PAGE_SIZE + idx;
+                    return (
                     <TableRow
-                      key={idx}
+                      key={globalIdx}
                       className="hover:bg-blue-50 transition"
                     >
                       {allKeys.map((key) => (
@@ -997,7 +1026,7 @@ export default function SlugPage() {
                               </div>
                               <select
                                 value={String(row[key] || '')}
-                                onChange={(e) => handleFieldUpdate(idx, key, e.target.value)}
+                                onChange={(e) => handleFieldUpdate(globalIdx, key, e.target.value)}
                                 disabled={isUpdatingStatus === idx}
                                 className="text-xs px-2 py-1 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 min-w-24"
                                 title={`Change ${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`}
@@ -1024,14 +1053,14 @@ export default function SlugPage() {
                             <DownloadButton id={String((row as any)?._id || '')} label="Download" />
                           )}
                           <Button
-                            onClick={() => setViewIdx(idx)}
+                            onClick={() => setViewIdx(globalIdx)}
                             title="View details"
                             size="icon"
                           >
                             <MdVisibility className="w-4 h-4" />
                           </Button>
                           <Button
-                            onClick={() => setEditIdx(idx)}
+                            onClick={() => setEditIdx(globalIdx)}
                             title="Edit"
                             size="icon"
                             disabled={patchMutation.isLoading}
@@ -1052,7 +1081,7 @@ export default function SlugPage() {
                                   const options = getStatusOptions(statusField);
                                   const currentIndex = options.indexOf(currentStatus);
                                   const nextStatus = options[(currentIndex + 1) % options.length];
-                                  handleFieldUpdate(idx, statusField, nextStatus);
+                                  handleFieldUpdate(globalIdx, statusField, nextStatus);
                                 }
                               }}
                               title="Quick Status Change"
@@ -1069,7 +1098,7 @@ export default function SlugPage() {
                             </Button>
                           )}
                           <Button
-                            onClick={() => setDeleteIdx(idx)}
+                            onClick={() => setConfirmDelete({ open: true, idx: globalIdx })}
                             title="Delete"
                             size="icon"
                             variant="destructive"
@@ -1084,10 +1113,16 @@ export default function SlugPage() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))
+                  );
+                })
                 )}
               </TableBody>
             </Table>
+            {/* Pagination Controls */}
+            {slug !== 'orders' && totalPages > 1 && (
+              <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+            )}
+            </>
           )}
         </div>
           )}
@@ -1123,33 +1158,20 @@ export default function SlugPage() {
           )}
         </Modal>
       )}
-      <Modal open={deleteIdx !== null} onClose={() => setDeleteIdx(null)}>
-        <h2 className=" !text-black text-lg font-semibold mb-2 ">Are you sure you want to delete?</h2>
-        <div className="flex gap-2 mt-4">
-                  <Button 
-                    onClick={() => handleDelete(deleteIdx as number)} 
-                    variant="destructive"
-                    disabled={isDeleting === deleteIdx}
-                    className="hover:bg-red-700"
-                  >
-          {isDeleting === deleteIdx ? (
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              Deleting...
-            </div>
-          ) : (
-            'Yes, Delete'
-          )}
-        </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => setDeleteIdx(null)}
-            disabled={isDeleting === deleteIdx}
-          >
-            Cancel
-          </Button>
-        </div>
-      </Modal>
+      <ConfirmDialog
+        open={confirmDelete.open}
+        title="Delete item?"
+        message="Are you sure you want to delete this item? This action cannot be undone."
+        primaryLabel="Delete"
+        danger
+        onSecondary={() => setConfirmDelete({ open: false })}
+        onPrimary={() => {
+          if (confirmDelete.idx !== undefined && confirmDelete.idx !== null) {
+            handleDelete(confirmDelete.idx);
+          }
+          setConfirmDelete({ open: false });
+        }}
+      />
       {/* Only show dynamic form modal for non-orders pages */}
       {slug !== 'orders' && (
         <Modal open={addOpen} onClose={() => setAddOpen(false)} isFullScreen={true}>
@@ -1165,28 +1187,33 @@ export default function SlugPage() {
         </Modal>
       )}
       {/* Post-create prompts */}
-      <Modal open={postCreatePrompt !== null} onClose={() => setPostCreatePrompt(null)}>
-        {postCreatePrompt?.type === 'measurement' && (
-          <div className="p-6 space-y-4">
-            <h3 className="text-lg font-semibold">Measurement created</h3>
-            <p className="text-gray-600">Proceed to create an order?</p>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setPostCreatePrompt(null)}>Close</Button>
-              <Button onClick={() => { setPostCreatePrompt(null); router.push('/orders?open=1'); }}>Go to Orders</Button>
-            </div>
-          </div>
-        )}
-        {postCreatePrompt?.type === 'order' && (
-          <div className="p-6 space-y-4">
-            <h3 className="text-lg font-semibold">Order created successfully</h3>
-            <p className="text-gray-600">You can review and download the invoice from the invoices page.</p>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setPostCreatePrompt(null)}>Stay</Button>
-              <Button onClick={() => { setPostCreatePrompt(null); router.push('/invoices'); }}>Go to Invoices</Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      <ConfirmDialog
+        open={postCreatePrompt?.type === 'measurement'}
+        title="Measurement created"
+        description="Proceed to create an order?"
+        secondaryLabel="Close"
+        primaryLabel="Go to Orders"
+        onSecondary={() => setPostCreatePrompt(null)}
+        onPrimary={() => { setPostCreatePrompt(null); router.push('/orders?open=1'); }}
+      />
+      <ConfirmDialog
+        open={postCreatePrompt?.type === 'customer'}
+        title="Customer created"
+        description="Proceed to create a measurement?"
+        secondaryLabel="Close"
+        primaryLabel="Go to Measurements"
+        onSecondary={() => setPostCreatePrompt(null)}
+        onPrimary={() => { setPostCreatePrompt(null); router.push('/measurements?open=1'); }}
+      />
+      <ConfirmDialog
+        open={postCreatePrompt?.type === 'order'}
+        title="Order created successfully"
+        description="You can review and download the invoice from the invoices page."
+        secondaryLabel="Stay"
+        primaryLabel="Go to Invoices"
+        onSecondary={() => setPostCreatePrompt(null)}
+        onPrimary={() => { setPostCreatePrompt(null); router.push('/invoices'); }}
+      />
   
   
     </div>
