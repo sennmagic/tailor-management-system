@@ -12,6 +12,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { ViewDetailsModal } from "@/components/ui/ViewDetailsModal";
 import { DataTable } from "@/components/ui/DataTable";
 import { Modal } from "@/components/ui/Modal";
+import { TableFilter } from "@/components/ui/TableFilter";
 import { useLookup } from "@/lib/hooks/useLookup";
 import { getEntityDisplayName } from "@/lib/config/endpoints";
 import Link from "next/link";
@@ -31,6 +32,7 @@ export default function SlugPage() {
   const [postCreatePrompt, setPostCreatePrompt] = useState<null | { type: 'customer' | 'measurement' | 'order', id?: string }>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; idx?: number }>({ open: false });
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<number | null>(null);
+  const [filteredData, setFilteredData] = useState<Array<Record<string, unknown>>>([]);
   const hasAutoOpenedRef = useRef(false);
 
   // React Query hooks
@@ -55,6 +57,11 @@ export default function SlugPage() {
     if (!apiData) return [];
     return extractDataArray(apiData);
   }, [apiData, extractDataArray]);
+
+  // Initialize filtered data when apiResponse changes
+  useEffect(() => {
+    setFilteredData(apiResponse);
+  }, [apiResponse]);
 
   // Mutation hooks for CRUD operations
   const createMutation = useAPIMutation({
@@ -272,12 +279,24 @@ export default function SlugPage() {
         />
       )}
       
+      {/* Table Filter */}
+      {!addOpen && apiResponse.length > 0 && (
+        <TableFilter
+          data={apiResponse}
+          onFilteredDataChange={setFilteredData}
+          searchFields={[]} // Auto-detect
+          statusFields={[]} // Auto-detect
+          dateFields={[]} // Auto-detect
+          numberFields={[]} // Auto-detect
+        />
+      )}
+
       {/* Use improved OrderTable for orders page, DataTable for other pages */}
       {!addOpen && (
         <>
           {slug === 'orders' ? (
             <OrderTable
-              orders={apiResponse as any[]}
+              orders={filteredData as any[]}
               loading={isLoading}
               onEdit={(order) => {
                 const orderIndex = apiResponse.findIndex(item => item._id === order._id);
@@ -306,7 +325,7 @@ export default function SlugPage() {
             />
           ) : (
             <DataTable
-              data={apiResponse}
+              data={filteredData}
               loading={isLoading}
               error={error}
               slug={slug}
